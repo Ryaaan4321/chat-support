@@ -5,7 +5,7 @@
   "scripts": {
     "test": "jest",
     "test:unit": "jest tests/unit",
-    "test:integration": "jest tests/integration",
+    "test:integration": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config jest.integration.config.js",
     "test:concurrency": "jest tests/concurrency",
     "test:watch": "jest --watch"
   },
@@ -16,6 +16,8 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^26.2.0",
     "@types/pg": "^8.23.1",
+    "cross-env": "^10.1.0",
+    "dotenv": "^17.4.2",
     "jest": "^30.4.2",
     "prisma": "^7.9.1",
     "ts-jest": "^29.4.12",
