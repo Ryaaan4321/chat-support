@@ -3,6 +3,6 @@ import { claimAgentForChat,claimChatForAgent } from "../repositories/agent.repos
 export async function onNewChat(chatId:string){
     return claimAgentForChat(chatId);
 }
-export async function onAgentFreedUp(chatId:string){
-    return claimChatForAgent(chatId);
+export async function onAgentFreedUp(agentId:string){
+    return claimChatForAgent(agentId);
 }
