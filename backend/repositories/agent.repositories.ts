@@ -27,7 +27,8 @@ export async function claimAgentForChat(chatId: string) {
         assignedAt: new Date(),
       },
     });
-  });
+  }, { maxWait: 10000, timeout: 10000 }
+  );
 }
 export async function claimChatForAgent(agentId: string) {
   return prisma.$transaction(async (tx) => {
@@ -61,5 +62,6 @@ export async function claimChatForAgent(agentId: string) {
         assignedAt: new Date(),
       },
     });
-  });
+  }, { maxWait: 10000, timeout: 10000 }
+  );
 }

@@ -6,7 +6,7 @@
     "test": "jest",
     "test:unit": "jest tests/unit",
     "test:integration": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config jest.integration.config.js",
-    "test:concurrency": "jest tests/concurrency",
+    "test:concurrency": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config jest.concurrency.config.js",
     "test:watch": "jest --watch"
   },
   "author": "",
