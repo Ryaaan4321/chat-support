@@ -1,5 +1,5 @@
-import { prisma } from '../lib/prisma';
-import { AgentIdRow, AgentCapacityRow, ChatIdRow } from '../types/agent.types';
+import { prisma } from '../../lib/prisma';
+import { AgentIdRow, AgentCapacityRow, ChatIdRow } from '../../types/agent.types';
 
 export async function claimAgentForChat(chatId: string) {
   return prisma.$transaction(async (tx) => {
@@ -65,3 +65,28 @@ export async function claimChatForAgent(agentId: string) {
   }, { maxWait: 10000, timeout: 10000 }
   );
 }
+
+export async function closeChatAndRelease(chatId: string) {
+  return prisma.$transaction(async (tx) => {
+    const chat = await tx.chat.findUnique({ where: { id: chatId } });
+    if (!chat) throw new Error(`Chat ${chatId} not found`);
+    if (chat.status === 'CLOSED') {
+      return { chat, agentId: chat.assignedAgentId };
+    }
+    const closedChat = await tx.chat.update({
+      where: { id: chatId },
+      data: { status: 'CLOSED', closedAt: new Date() },
+    });
+    let agentId: string | null = null;
+    if (chat.assignedAgentId) {
+      agentId = chat.assignedAgentId;
+      await tx.agent.updateMany({
+        where: { id: chat.assignedAgentId, activeChatCount: { gt: 0 } },
+        data: { activeChatCount: { decrement: 1 } },
+      });
+    }
+    return { chat: closedChat, agentId };
+  });
+}
+
+
