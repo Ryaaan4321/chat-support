@@ -1,7 +1,7 @@
-import { onNewChat,onAgentFreedUp } from '../../services/assignment.service';
-import { claimAgentForChat,claimChatForAgent } from '../../repositories/agent.repositories';
+import { onNewChat,onAgentFreedUp } from '../../src/services/assignment.service';
+import { claimAgentForChat,claimChatForAgent } from '../../src/repositories/agent.repositories';
 import { describe, it, expect,afterEach,jest } from '@jest/globals';
-jest.mock('../../repositories/agent.repositories', () => ({
+jest.mock('../../src/repositories/agent.repositories', () => ({
   claimAgentForChat: jest.fn(),
   claimChatForAgent: jest.fn(),
 }));

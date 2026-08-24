@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma';
-import { claimAgentForChat, claimChatForAgent } from '../../repositories/agent.repositories';
+import { claimAgentForChat, claimChatForAgent } from '../../src/repositories/agent.repositories';
 import { describe, it, expect,afterEach,jest,afterAll } from '@jest/globals';
 describe('assignment engine — integration', () => {
   afterEach(async () => {

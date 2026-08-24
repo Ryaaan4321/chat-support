@@ -8,4 +8,9 @@ module.exports = {
   transform: {
     ...tsJestTransformCfg,
   },
+  testPathIgnorePatterns: [
+    "/node_modules/",
+    "<rootDir>/tests/integration/",
+    "<rootDir>/tests/concurrency/",
+  ],
 };
