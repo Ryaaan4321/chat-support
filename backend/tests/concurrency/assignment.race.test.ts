@@ -1,8 +1,17 @@
 import { prisma } from '../../lib/prisma';
-import { claimAgentForChat, claimChatForAgent } from '../../repositories/agent.repositories';
-import { describe, it, expect,afterEach,jest,afterAll } from '@jest/globals';
+import { claimAgentForChat, claimChatForAgent } from '../../src/repositories/agent.repositories';
+import { describe, it, expect, afterEach, beforeAll, jest, afterAll } from '@jest/globals';
+
 describe('assignment engine — concurrency', () => {
+  beforeAll(async () => {
+    await prisma.message.deleteMany();
+    await prisma.chat.deleteMany();
+    await prisma.agent.deleteMany();
+  });
+
   afterEach(async () => {
+    await new Promise((r) => setTimeout(r, 500));
+    await prisma.message.deleteMany();
     await prisma.chat.deleteMany();
     await prisma.agent.deleteMany();
   });
@@ -32,7 +41,7 @@ describe('assignment engine — concurrency', () => {
       (r) => r?.assignedAgentId === agent.id
     ).length;
 
-    expect(assignedCount).toBe(1); 
+    expect(assignedCount).toBe(1);
     const dbAgent = await prisma.agent.findUnique({ where: { id: agent.id } });
     const activeChatsInDb = await prisma.chat.count({
       where: { assignedAgentId: agent.id, status: 'ACTIVE' },
@@ -60,8 +69,10 @@ describe('assignment engine — concurrency', () => {
       )
     );
     await Promise.all(chats.map((chat) => claimAgentForChat(chat.id)));
-
-    const activeChats = await prisma.chat.count({ where: { status: 'ACTIVE' } });
+    const agentIds = agents.map((a) => a.id);
+    const activeChats = await prisma.chat.count({
+      where: { assignedAgentId: { in: agentIds }, status: 'ACTIVE' },
+    });
     expect(activeChats).toBe(10);
     for (const agent of agents) {
       const dbAgent = await prisma.agent.findUnique({ where: { id: agent.id } });

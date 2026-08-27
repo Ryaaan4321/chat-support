@@ -3,8 +3,10 @@ import { claimAgentForChat, claimChatForAgent } from '../../src/repositories/age
 import { describe, it, expect,afterEach,jest,afterAll } from '@jest/globals';
 describe('assignment engine — integration', () => {
   afterEach(async () => {
+    await prisma.message.deleteMany();
     await prisma.chat.deleteMany();
     await prisma.agent.deleteMany();
+    
   });
 
   afterAll(async () => {

@@ -37,8 +37,8 @@ describe('assignment.service', () => {
     });
     it('only assigns one of two simultaneous chats when there is one free slot', async () => {
       mockClaimAgentForChat
-        .mockResolvedValueOnce({ id: 'chat-a', assignedAgentId: 'agent-1' } as any)
-        .mockResolvedValueOnce(null);
+        .mockResolvedValue(null)
+        .mockResolvedValueOnce({ id: 'chat-a', assignedAgentId: 'agent-1' } as any);
       const [resultA, resultB] = await Promise.all([
         onNewChat('chat-a'),
         onNewChat('chat-b'),

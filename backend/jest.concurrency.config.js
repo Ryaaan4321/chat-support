@@ -7,4 +7,5 @@ module.exports = {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   testTimeout: 100000,
+  maxWorkers: 1,
 };

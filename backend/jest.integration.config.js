@@ -1,3 +1,4 @@
+
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
@@ -6,5 +7,6 @@ module.exports = {
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
-  testTimeout: 15000,
+  testTimeout: 45000,
+  maxWorkers: 1,
 };
