@@ -8,6 +8,7 @@ import type {
 import { prisma } from '../../lib/prisma';
 import { onAgentFreedUp } from '../services/assignment.service';
 import { logger } from '../../lib/logger';
+import { AppError } from '../../lib/errors';
 
 type IoServer = Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 type IoSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
@@ -19,6 +20,10 @@ export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
 
   void (async () => {
     try {
+      if (!agentId) {
+        throw AppError.unauthorized('agentId is required on socket data');
+      }
+
       await prisma.agent.update({
         where: { id: agentId },
         data: { lastSeenAt: new Date() },
@@ -30,7 +35,7 @@ export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
         socket.join(`chat:${chat.id}`);
       }
     } catch (err) {
-      logger.error({ err, agentId }, '[agent connect] init failed');
+      logger.error({ err: AppError.from(err), agentId }, '[agent connect] init failed');
     }
   })();
 
@@ -41,7 +46,7 @@ export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
         data: { lastSeenAt: new Date() },
       });
     } catch (err) {
-      logger.error({ err, agentId }, '[heartbeat] update failed');
+      logger.error({ err: AppError.from(err), agentId }, '[heartbeat] update failed');
     }
   }, HEARTBEAT_INTERVAL_MS);
 
@@ -49,6 +54,10 @@ export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
 
   socket.on('agent:status_changed', async ({ shiftStatus }) => {
     try {
+      if (!shiftStatus) {
+        throw AppError.validation('shiftStatus is required');
+      }
+
       await prisma.agent.update({
         where: { id: agentId },
         data: { shiftStatus },
@@ -70,7 +79,7 @@ export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
         }
       }
     } catch (err) {
-      logger.error({ err, agentId }, '[agent:status_changed] handler error');
+      logger.error({ err: AppError.from(err), agentId }, '[agent:status_changed] handler error');
     }
   });
 }

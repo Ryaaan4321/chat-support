@@ -5,6 +5,7 @@ import type { ClientToServerEvents, ServerToClientEvents, InterServerEvents, Soc
 import { registerChatHandlers, sweepWaitingChats } from './sockets/chat.socket';
 import { registerAgentHandlers, sweepStaleAgents } from './sockets/agent.socket';
 import { logger } from '../lib/logger';
+import { AppError } from '../lib/errors';
 
 export function createRealtimeServer() {
   const app = express();
@@ -28,7 +29,7 @@ export function createRealtimeServer() {
       userId?: string;
     };
     if (!token || !role || !userId) {
-      return next(new Error('unauthorized'));
+      return next(AppError.unauthorized('unauthorized'));
     }
     socket.data.role = role;
     socket.data.userId = userId;
@@ -65,10 +66,10 @@ if (require.main === module) {
   });
 
   setInterval(() => {
-    sweepStaleAgents().catch((err) => logger.error({ err }, '[sweepStaleAgents] failed'));
+    sweepStaleAgents().catch((err) => logger.error({ err: AppError.from(err) }, '[sweepStaleAgents] failed'));
   }, 30_000);
 
   setInterval(() => {
-    sweepWaitingChats(io).catch((err) => logger.error({ err }, '[sweepWaitingChats] failed'));
+    sweepWaitingChats(io).catch((err) => logger.error({ err: AppError.from(err) }, '[sweepWaitingChats] failed'));
   }, 10_000);
 }

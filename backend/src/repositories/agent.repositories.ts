@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma';
 import { AgentIdRow, AgentCapacityRow, ChatIdRow } from '../../types/agent.types';
+import { AppError } from '../../lib/errors';
 
 export async function claimAgentForChat(chatId: string) {
   try {
@@ -34,7 +35,7 @@ export async function claimAgentForChat(chatId: string) {
     );
   } catch (err: any) {
     if (err.code === 'P2025') return null;
-    throw err;
+    throw AppError.from(err, 'Failed to claim agent for chat');
   }
 }
 
@@ -77,7 +78,7 @@ export async function claimChatForAgent(agentId: string) {
     );
   } catch (err: any) {
     if (err.code === 'P2025') return null;
-    throw err;
+    throw AppError.from(err, 'Failed to claim chat for agent');
   }
 }
 
@@ -115,6 +116,6 @@ export async function closeChatAndRelease(chatId: string): Promise<{ agentId: st
     );
   } catch (err: any) {
     if (err.code === 'P2025') return { agentId: null };
-    throw err;
+    throw AppError.from(err, 'Failed to close chat');
   }
 }

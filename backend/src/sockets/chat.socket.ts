@@ -9,6 +9,7 @@ import { onNewChat, onAgentFreedUp } from '../services/assignment.service';
 import { closeChatAndRelease } from '../repositories/agent.repositories';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
+import { AppError } from '../../lib/errors';
 
 type IoServer = Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 type IoSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
@@ -16,6 +17,10 @@ type IoSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEv
 export function registerChatHandlers(io: IoServer, socket: IoSocket) {
   socket.on('chat:new', async ({ customerId }) => {
     try {
+      if (!customerId) {
+        throw AppError.validation('customerId is required');
+      }
+
       const chat = await prisma.chat.create({ data: { customerId } });
 
       socket.join(`chat:${chat.id}`);
@@ -35,12 +40,16 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
         io.to(`chat:${chat.id}`).emit('chat:queued', { chatId: chat.id, position: 0 });
       }
     } catch (err) {
-      logger.error({ err }, '[chat:new] handler error');
+      logger.error({ err: AppError.from(err) }, '[chat:new] handler error');
     }
   });
 
   socket.on('chat:rejoin', async ({ chatId }) => {
     try {
+      if (!chatId) {
+        throw AppError.validation('chatId is required');
+      }
+
       const chat = await prisma.chat.findUnique({
         where: { id: chatId },
         include: { messages: { orderBy: { sentAt: 'asc' } } },
@@ -61,12 +70,16 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
         })),
       });
     } catch (err) {
-      logger.error({ err }, '[chat:rejoin] handler error');
+      logger.error({ err: AppError.from(err) }, '[chat:rejoin] handler error');
     }
   });
 
   socket.on('chat:message', async ({ chatId, senderType, text }) => {
     try {
+      if (!chatId || !senderType || !text) {
+        throw AppError.validation('chatId, senderType, and text are required');
+      }
+
       const message = await prisma.message.create({ data: { chatId, senderType, text } });
 
       io.to(`chat:${chatId}`).emit('chat:message', {
@@ -76,12 +89,16 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
         sentAt: message.sentAt.toISOString(),
       });
     } catch (err) {
-      logger.error({ err }, '[chat:message] handler error');
+      logger.error({ err: AppError.from(err) }, '[chat:message] handler error');
     }
   });
 
   socket.on('chat:closed', async ({ chatId }) => {
     try {
+      if (!chatId) {
+        throw AppError.validation('chatId is required');
+      }
+
       const { agentId } = await closeChatAndRelease(chatId);
       io.to(`chat:${chatId}`).emit('chat:closed', {
         chatId,
@@ -102,7 +119,7 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
         }
       }
     } catch (err) {
-      logger.error({ err }, '[chat:closed] handler error');
+      logger.error({ err: AppError.from(err) }, '[chat:closed] handler error');
     }
   });
 }
