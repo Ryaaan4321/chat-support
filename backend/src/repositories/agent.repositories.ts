@@ -1,9 +1,17 @@
 import { prisma } from '../../lib/prisma';
 import { AgentIdRow, AgentCapacityRow, ChatIdRow } from '../../types/agent.types';
-import { AppError } from '../../lib/errors';
 
 export async function claimAgentForChat(chatId: string) {
   try {
+    /*
+    understanding what is happening in the below query:
+    we are locking the row because 
+     -- suppose there are two chats want to claim for the agent with name chat-a 
+        and chat-b and if we are not locking them up and not using SKIP than they will
+        wait untill this transaction completes or fails which can create the deadlock.
+        hence that's what it prevents if there is a chat-a that has already LOCK the row
+        than chat-b will SKIP the row and will try to find the next available agent.
+    */
     return await prisma.$transaction(
       async (tx) => {
         const [agent] = await tx.$queryRaw<AgentIdRow[]>`
@@ -16,12 +24,10 @@ export async function claimAgentForChat(chatId: string) {
           LIMIT 1
         `;
         if (!agent) return null;
-
         await tx.agent.update({
           where: { id: agent.id },
           data: { activeChatCount: { increment: 1 } },
         });
-
         return tx.chat.update({
           where: { id: chatId },
           data: {
@@ -35,7 +41,7 @@ export async function claimAgentForChat(chatId: string) {
     );
   } catch (err: any) {
     if (err.code === 'P2025') return null;
-    throw AppError.from(err, 'Failed to claim agent for chat');
+    throw err;
   }
 }
 
@@ -78,7 +84,7 @@ export async function claimChatForAgent(agentId: string) {
     );
   } catch (err: any) {
     if (err.code === 'P2025') return null;
-    throw AppError.from(err, 'Failed to claim chat for agent');
+    throw err;
   }
 }
 
@@ -116,6 +122,6 @@ export async function closeChatAndRelease(chatId: string): Promise<{ agentId: st
     );
   } catch (err: any) {
     if (err.code === 'P2025') return { agentId: null };
-    throw AppError.from(err, 'Failed to close chat');
+    throw err;
   }
 }

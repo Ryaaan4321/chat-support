@@ -4,12 +4,39 @@ import { Server } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData } from '../types/socket.event.types';
 import { registerChatHandlers, sweepWaitingChats } from './sockets/chat.socket';
 import { registerAgentHandlers, sweepStaleAgents } from './sockets/agent.socket';
+import { authenticateSocket } from './middlewares/auth.middleware';
+import { errorHandler } from './middlewares/error.middleware';
+import authRoutes from './routes/auth.routes';
 import { logger } from '../lib/logger';
 import { AppError } from '../lib/errors';
 
 export function createRealtimeServer() {
   const app = express();
   const httpServer = createServer(app);
+
+  app.use(express.json());
+
+  app.use((req, res, next) => {
+    const origin = process.env.CLIENT_ORIGIN ?? 'http://localhost:3000';
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
+
+  app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  app.use('/api/auth', authRoutes);
+
+  app.use(errorHandler);
+
   const io = new Server<
     ClientToServerEvents,
     ServerToClientEvents,
@@ -22,19 +49,7 @@ export function createRealtimeServer() {
     },
   });
 
-  io.use((socket, next) => {
-    const { token, role, userId } = socket.handshake.auth as {
-      token?: string;
-      role?: SocketData['role'];
-      userId?: string;
-    };
-    if (!token || !role || !userId) {
-      return next(AppError.unauthorized('unauthorized'));
-    }
-    socket.data.role = role;
-    socket.data.userId = userId;
-    next();
-  });
+  io.use(authenticateSocket);
 
   io.on('connection', (socket) => {
     const { role, userId } = socket.data;

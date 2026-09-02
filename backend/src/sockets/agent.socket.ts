@@ -57,14 +57,11 @@ export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
       if (!shiftStatus) {
         throw AppError.validation('shiftStatus is required');
       }
-
       await prisma.agent.update({
         where: { id: agentId },
         data: { shiftStatus },
       });
-
       io.to('managers').emit('agent:status_changed', { agentId, shiftStatus });
-
       if (shiftStatus === 'AVAILABLE') {
         const next = await onAgentFreedUp(agentId);
         if (next) {

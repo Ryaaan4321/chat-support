@@ -49,7 +49,6 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
       if (!chatId) {
         throw AppError.validation('chatId is required');
       }
-
       const chat = await prisma.chat.findUnique({
         where: { id: chatId },
         include: { messages: { orderBy: { sentAt: 'asc' } } },
