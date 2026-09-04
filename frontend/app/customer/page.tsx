@@ -1,76 +1,111 @@
 'use client';
 
-import React from 'react';
-import { CustomerWidget } from '../../components/customer/CustomerWidget';
-import { AppShell } from '../../components/shell/AppShell';
-import { Shield, Sparkles, Check, HelpCircle, ArrowRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { AppHeader } from '@/components/desk/app-header';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textare';
+import { Clock, Send, MessageSquare, CheckCircle2 } from 'lucide-react';
 
 export default function CustomerPage() {
+  const [prompt, setPrompt] = useState('');
+  const [customerId, setCustomerId] = useState('cust-alex-99');
+  const [submitted, setSubmitted] = useState(false);
+  const [waitingCount, setWaitingCount] = useState(1);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prompt.trim()) return;
+
+    setSubmitted(true);
+    setWaitingCount((prev) => prev + 1);
+    setPrompt('');
+  };
+
   return (
-    <AppShell activeRole="CUSTOMER" activeIdentityLabel="Client Portal Preview" isConnected={true}>
-      <div className="flex flex-col gap-8 max-w-4xl mx-auto w-full py-4">
-        <div className="rounded-3xl bg-gradient-to-b from-[#171C23] to-[#121519] border border-[#272E38] p-8 sm:p-10 shadow-2xl relative overflow-hidden">
-          <div className="max-w-xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#16A34A]/10 text-[#22C55E] text-xs font-semibold uppercase tracking-wider mb-4 border border-[#16A34A]/20">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Customer Facing Embedded Experience</span>
+    <div className="flex h-screen min-h-0 w-full max-w-full flex-col bg-[#F8FAFC] text-[#0F172A] overflow-hidden">
+      <AppHeader />
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-8 flex items-center justify-center">
+        <div className="w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 md:p-8 shadow-sm space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-xl bg-[#EFF6FF] border border-[#BFDBFE] flex items-center justify-center text-[#2563EB]">
+              <MessageSquare className="size-5" />
             </div>
-
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
-              Customer Support Widget Demonstration
-            </h1>
-
-            <p className="text-xs sm:text-sm text-[#9CA3AF] mt-3 leading-relaxed">
-              This page showcases the lightweight client-side widget. Click the green chat bubble in the bottom-right corner to initiate a real-time session, experience the FIFO queue waiting animation, and chat with an assigned agent.
-            </p>
-
-            <div className="mt-6 flex flex-wrap gap-4">
-              <div className="flex items-center gap-2 text-xs text-[#D1D5DB]">
-                <div className="w-5 h-5 rounded-full bg-[#16A34A]/20 flex items-center justify-center text-[#22C55E]">
-                  <Check className="w-3 h-3" />
-                </div>
-                <span>Zero-auth session generation</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-[#D1D5DB]">
-                <div className="w-5 h-5 rounded-full bg-[#16A34A]/20 flex items-center justify-center text-[#22C55E]">
-                  <Check className="w-3 h-3" />
-                </div>
-                <span>Live queue position listener</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-[#D1D5DB]">
-                <div className="w-5 h-5 rounded-full bg-[#16A34A]/20 flex items-center justify-center text-[#22C55E]">
-                  <Check className="w-3 h-3" />
-                </div>
-                <span>Clean resolution and reset flow</span>
-              </div>
+            <div>
+              <h1 className="text-base font-bold text-[#0F172A]">
+                Customer Support Queue
+              </h1>
+              <p className="text-xs text-[#64748B]">
+                High-concurrency instant agent matching
+              </p>
             </div>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-5 rounded-2xl bg-[#14171C] border border-[#22262B]">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-1 flex items-center gap-2">
-              <HelpCircle className="w-4 h-4 text-[#38BDF8]" />
-              <span>How To Test Concurrency Live</span>
-            </h3>
-            <p className="text-xs text-[#9CA3AF] leading-relaxed">
-              Open the <strong>Agent Workspace</strong> in another browser tab, set the agent status to <strong>Available</strong>, and click <em>Start Live Chat</em> in the widget to watch atomic slot assignment instantly connect.
-            </p>
-          </div>
+          {submitted ? (
+            <div className="rounded-xl bg-[#F8FAFC] border border-emerald-200 p-5 text-center space-y-3">
+              <div className="size-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+                <CheckCircle2 className="size-5" />
+              </div>
+              <h2 className="text-sm font-semibold text-[#0F172A]">Queued in Priority Line</h2>
+              <p className="text-xs text-[#64748B]">
+                Your request has been placed in the atomic queue. An available specialist will claim your session automatically.
+              </p>
+              <Button
+                onClick={() => setSubmitted(false)}
+                variant="outline"
+                size="sm"
+                className="w-full mt-2 cursor-pointer text-xs"
+              >
+                Queue Another Request
+              </Button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#475569] uppercase tracking-wider mb-1.5">
+                  Customer Identifier
+                </label>
+                <input
+                  type="text"
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value)}
+                  className="w-full bg-white border border-[#E2E8F0] rounded-xl px-3.5 py-2 text-xs md:text-sm text-[#0F172A] focus:border-[#2563EB] outline-none transition-all"
+                  required
+                />
+              </div>
 
-          <div className="p-5 rounded-2xl bg-[#14171C] border border-[#22262B]">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-1 flex items-center gap-2">
-              <Shield className="w-4 h-4 text-[#FBBF24]" />
-              <span>Queue Overflow Testing</span>
-            </h3>
-            <p className="text-xs text-[#9CA3AF] leading-relaxed">
-              Set agents to <strong>On Break</strong> or fill all available slots. New customer sessions will seamlessly wait in the queued state until an agent resolves a chat.
-            </p>
+              <div>
+                <label className="block text-xs font-semibold text-[#475569] uppercase tracking-wider mb-1.5">
+                  How can we help you?
+                </label>
+                <Textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe your issue with order, refund, or delivery..."
+                  rows={4}
+                  className="bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] rounded-xl text-xs"
+                  required
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full h-10 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] font-semibold text-xs text-white shadow-xs cursor-pointer"
+              >
+                <Send className="size-3.5" />
+                <span>Join Support Queue</span>
+              </Button>
+            </form>
+          )}
+
+          <div className="border-t border-[#E2E8F0] pt-4 flex items-center justify-between text-xs text-[#64748B]">
+            <span className="flex items-center gap-1.5 font-mono">
+              <Clock className="size-3.5 text-[#2563EB]" />
+              <span>Queue: {waitingCount} waiting</span>
+            </span>
+            <span className="font-semibold text-emerald-600">Avg wait &lt; 10s</span>
           </div>
         </div>
       </div>
-
-      <CustomerWidget defaultOpen={true} />
-    </AppShell>
+    </div>
   );
 }
