@@ -1,3 +1,14 @@
+export type ShiftStatus =
+  | 'OFFLINE'
+  | 'AVAILABLE'
+  | 'ON_BREAK'
+  | 'WRAP_UP'
+  | 'SHIFT_ENDED';
+
+export type ChatStatus = 'WAITING' | 'ACTIVE' | 'CLOSED';
+
+export type SenderType = 'AGENT' | 'CUSTOMER';
+
 export interface ChatNewPayload {
   customerId: string;
 }
@@ -5,12 +16,12 @@ export interface ChatNewPayload {
 export interface ChatAssignedPayload {
   chatId: string;
   agentId: string;
-  assignedAt: string; 
+  assignedAt: string;
 }
 
 export interface ChatMessagePayload {
   chatId: string;
-  senderType: 'AGENT' | 'CUSTOMER';
+  senderType: SenderType;
   text: string;
   sentAt: string;
 }
@@ -23,15 +34,15 @@ export interface ChatClosedPayload {
 
 export interface AgentStatusChangedPayload {
   agentId: string;
-  shiftStatus: 'OFFLINE' | 'AVAILABLE' | 'ON_BREAK' | 'WRAP_UP' | 'SHIFT_ENDED';
+  shiftStatus: ShiftStatus;
 }
 
 export interface ChatSyncPayload {
   chatId: string;
-  status: 'WAITING' | 'ACTIVE' | 'CLOSED';
+  status: ChatStatus;
   agentId: string | null;
   messages: Array<{
-    senderType: 'AGENT' | 'CUSTOMER';
+    senderType: SenderType;
     text: string;
     sentAt: string;
   }>;
@@ -57,14 +68,14 @@ export interface ClientToServerEvents {
 
 export interface SocketData {
   role: 'AGENT' | 'CUSTOMER' | 'MANAGER';
-  userId: string; 
+  userId: string;
 }
 
 export interface AgentInfo {
   id: string;
   name: string;
   email: string;
-  shiftStatus: 'OFFLINE' | 'AVAILABLE' | 'ON_BREAK' | 'WRAP_UP' | 'SHIFT_ENDED';
+  shiftStatus: ShiftStatus;
   chatCapacity: number;
   activeChatCount: number;
   lastSeenAt?: string | null;
@@ -73,12 +84,12 @@ export interface AgentInfo {
 export interface ChatItem {
   id: string;
   customerId: string;
-  status: 'WAITING' | 'ACTIVE' | 'CLOSED';
+  status: ChatStatus;
   assignedAgentId?: string | null;
   queuedAt?: string;
   assignedAt?: string | null;
   messages: Array<{
-    senderType: 'AGENT' | 'CUSTOMER';
+    senderType: SenderType;
     text: string;
     sentAt: string;
   }>;

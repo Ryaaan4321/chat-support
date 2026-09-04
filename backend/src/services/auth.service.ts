@@ -46,9 +46,7 @@ export async function loginManager(email: string, secretKey?: string) {
   if (secretKey && secretKey !== MANAGER_SECRET_KEY) {
     throw AppError.unauthorized('Invalid manager authorization key');
   }
-
   const managerId = `mgr-${crypto.createHash('md5').update(email.toLowerCase().trim()).digest('hex').slice(0, 8)}`;
-
   const payload: JwtUserPayload = {
     userId: managerId,
     role: 'MANAGER',
