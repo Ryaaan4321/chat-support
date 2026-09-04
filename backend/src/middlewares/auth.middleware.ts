@@ -14,6 +14,10 @@ declare global {
   }
 }
 
+export interface AuthenticatedRequest extends Request {
+  user?: JwtUserPayload;
+}
+
 export function authenticateHttp(req: Request, res: Response, next: NextFunction) {
   try {
     const token = extractBearerToken(req.headers.authorization);

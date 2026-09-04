@@ -1,9 +1,10 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import { useDesk, useMyActiveChats, Chat } from '@/lib/desk-store';
 import { cn } from '@/lib/utils';
-import { MessageSquare, User } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { TimeDisplay } from './time-display';
 
 export function ChatList() {
@@ -35,6 +36,11 @@ export function ChatList() {
           (typeof chat.customer === 'object' ? chat.customer?.name : chat.customer) ||
           chat.id;
         const unreadCount = chat.unreadCount ?? chat.unread ?? 0;
+        const avatarUrl =
+          chat.customerAvatar ||
+          (chat as any).avatarUrl ||
+          (chat.customer as any)?.avatarUrl ||
+          '/avatars/avatar-1.png';
 
         return (
           <button
@@ -54,15 +60,14 @@ export function ChatList() {
 
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
-                <div
-                  className={cn(
-                    'size-6 rounded-md flex items-center justify-center text-xs font-medium shrink-0',
-                    isSelected
-                      ? 'bg-[#2563EB] text-white'
-                      : 'bg-[#F1F5F9] text-[#64748B]'
-                  )}
-                >
-                  <User className="size-3.5" />
+                <div className="size-7 rounded-full relative overflow-hidden bg-[#EFF6FF] border border-[#BFDBFE] shrink-0">
+                  <Image
+                    src={avatarUrl}
+                    alt={customerName}
+                    fill
+                    sizes="28px"
+                    className="object-cover"
+                  />
                 </div>
                 <span className="text-xs font-semibold text-[#0F172A] truncate">
                   {customerName}

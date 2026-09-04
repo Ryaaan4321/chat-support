@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  signupHandler,
   loginAgentHandler,
   loginManagerHandler,
   createCustomerSessionHandler,
@@ -10,6 +11,7 @@ import { authenticateHttp } from '../middlewares/auth.middleware';
 
 const router = Router();
 
+router.post('/signup', signupHandler);
 router.post('/agent/login', loginAgentHandler);
 router.post('/manager/login', loginManagerHandler);
 router.post('/customer/session', createCustomerSessionHandler);

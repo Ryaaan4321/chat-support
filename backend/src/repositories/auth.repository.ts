@@ -30,3 +30,23 @@ export async function listAgents() {
     throw AppError.database('Failed to list agents', undefined, err);
   }
 }
+
+export async function createAgent(data: {
+  name: string;
+  email: string;
+  chatCapacity?: number;
+}) {
+  try {
+    return await prisma.agent.create({
+      data: {
+        name: data.name.trim(),
+        email: data.email.trim().toLowerCase(),
+        chatCapacity: data.chatCapacity ?? 2,
+        shiftStatus: 'AVAILABLE',
+      },
+    });
+  } catch (err) {
+    throw AppError.database('Failed to create agent', { email: data.email }, err);
+  }
+}
+

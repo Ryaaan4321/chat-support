@@ -31,12 +31,33 @@ export interface CustomerSessionResponse {
 export interface AgentsListResponse {
   agents: AgentInfo[];
 }
+export interface SignupRequest {
+  name: string;
+  email: string;
+  role: 'AGENT' | 'MANAGER' | 'CUSTOMER';
+  avatarUrl?: string;
+  chatCapacity?: number;
+}
+export interface SignupResponse {
+  token: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: 'AGENT' | 'MANAGER' | 'CUSTOMER';
+    avatarUrl?: string;
+    shiftStatus?: ShiftStatus;
+    chatCapacity?: number;
+    activeChatCount?: number;
+  };
+}
 export interface UserProfileResponse {
   user: {
     id: string;
     role: 'AGENT' | 'MANAGER' | 'CUSTOMER';
     name?: string;
     email?: string;
+    avatarUrl?: string;
     shiftStatus?: ShiftStatus;
   };
 }

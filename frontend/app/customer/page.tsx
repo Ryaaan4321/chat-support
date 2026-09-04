@@ -22,32 +22,32 @@ export default function CustomerPage() {
   };
 
   return (
-    <div className="flex h-screen min-h-0 w-full max-w-full flex-col bg-[#F8FAFC] text-[#0F172A] overflow-hidden">
+    <div className="min-h-dvh w-full max-w-full flex flex-col bg-[#F8FAFC] text-[#0F172A] overflow-x-hidden">
       <AppHeader />
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-8 flex items-center justify-center">
-        <div className="w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-6 md:p-8 shadow-sm space-y-6">
+      <main className="flex-1 w-full max-w-full min-w-0 px-3 py-4 sm:p-6 md:p-8 flex flex-col items-center justify-start sm:justify-center overflow-y-auto">
+        <div className="w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-4 sm:p-6 md:p-8 shadow-xs space-y-5 my-auto min-w-0">
           <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-[#EFF6FF] border border-[#BFDBFE] flex items-center justify-center text-[#2563EB]">
+            <div className="size-10 rounded-xl bg-[#EFF6FF] border border-[#BFDBFE] flex items-center justify-center text-[#2563EB] shrink-0">
               <MessageSquare className="size-5" />
             </div>
-            <div>
-              <h1 className="text-base font-bold text-[#0F172A]">
+            <div className="min-w-0">
+              <h1 className="text-base font-bold text-[#0F172A] truncate">
                 Customer Support Queue
               </h1>
-              <p className="text-xs text-[#64748B]">
+              <p className="text-xs text-[#64748B] truncate">
                 High-concurrency instant agent matching
               </p>
             </div>
           </div>
 
           {submitted ? (
-            <div className="rounded-xl bg-[#F8FAFC] border border-emerald-200 p-5 text-center space-y-3">
+            <div className="rounded-xl bg-[#F8FAFC] border border-emerald-200 p-4 sm:p-5 text-center space-y-3">
               <div className="size-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
                 <CheckCircle2 className="size-5" />
               </div>
               <h2 className="text-sm font-semibold text-[#0F172A]">Queued in Priority Line</h2>
-              <p className="text-xs text-[#64748B]">
-                Your request has been placed in the atomic queue. An available specialist will claim your session automatically.
+              <p className="text-xs text-[#64748B] leading-relaxed">
+                Your request has been placed in the queue. An available specialist will claim your session automatically.
               </p>
               <Button
                 onClick={() => setSubmitted(false)}
@@ -68,7 +68,7 @@ export default function CustomerPage() {
                   type="text"
                   value={customerId}
                   onChange={(e) => setCustomerId(e.target.value)}
-                  className="w-full bg-white border border-[#E2E8F0] rounded-xl px-3.5 py-2 text-xs md:text-sm text-[#0F172A] focus:border-[#2563EB] outline-none transition-all"
+                  className="w-full min-w-0 bg-white border border-[#E2E8F0] rounded-xl px-3.5 py-2 text-xs md:text-sm text-[#0F172A] focus:border-[#2563EB] outline-none transition-all box-border"
                   required
                 />
               </div>
@@ -82,7 +82,7 @@ export default function CustomerPage() {
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Describe your issue with order, refund, or delivery..."
                   rows={4}
-                  className="bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] rounded-xl text-xs"
+                  className="w-full min-w-0 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] rounded-xl text-xs box-border"
                   required
                 />
               </div>
@@ -97,15 +97,15 @@ export default function CustomerPage() {
             </form>
           )}
 
-          <div className="border-t border-[#E2E8F0] pt-4 flex items-center justify-between text-xs text-[#64748B]">
-            <span className="flex items-center gap-1.5 font-mono">
-              <Clock className="size-3.5 text-[#2563EB]" />
+          <div className="border-t border-[#E2E8F0] pt-3.5 flex flex-wrap items-center justify-between gap-2 text-xs text-[#64748B]">
+            <span className="flex items-center gap-1.5 font-mono text-[11px] sm:text-xs">
+              <Clock className="size-3.5 text-[#2563EB] shrink-0" />
               <span>Queue: {waitingCount} waiting</span>
             </span>
-            <span className="font-semibold text-emerald-600">Avg wait &lt; 10s</span>
+            <span className="font-semibold text-emerald-600 text-[11px] sm:text-xs">Avg wait &lt; 10s</span>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

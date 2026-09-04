@@ -7,6 +7,7 @@ export interface JwtUserPayload {
   role: SocketData['role'];
   email?: string;
   name?: string;
+  avatarUrl?: string;
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'swish-bpo-concurrency-secret-key-10s';

@@ -1,9 +1,111 @@
-import { findAgentByEmail, findAgentById } from '../repositories/auth.repository';
+import { findAgentByEmail, findAgentById, createAgent } from '../repositories/auth.repository';
 import { signToken, verifyToken, JwtUserPayload } from '../../lib/jwt';
 import { AppError } from '../../lib/errors';
 import crypto from 'crypto';
 
 const MANAGER_SECRET_KEY = process.env.MANAGER_SECRET_KEY || 'swish-manager-super-secret-2026';
+
+export async function signupUser(data: {
+  name: string;
+  email: string;
+  role: 'AGENT' | 'MANAGER' | 'CUSTOMER';
+  avatarUrl?: string;
+  chatCapacity?: number;
+}) {
+  if (!data.name || typeof data.name !== 'string') {
+    throw AppError.validation('Name is required');
+  }
+  if (!data.email || typeof data.email !== 'string') {
+    throw AppError.validation('Valid email is required');
+  }
+
+  const role = data.role || 'AGENT';
+  const cleanEmail = data.email.trim().toLowerCase();
+  const cleanName = data.name.trim();
+
+  if (role === 'AGENT') {
+    const existing = await findAgentByEmail(cleanEmail);
+    if (existing) {
+      throw AppError.conflict('An agent with this email already exists', { email: cleanEmail });
+    }
+
+    const agent = await createAgent({
+      name: cleanName,
+      email: cleanEmail,
+      chatCapacity: data.chatCapacity ?? 3,
+    });
+
+    const payload: JwtUserPayload = {
+      userId: agent.id,
+      role: 'AGENT',
+      email: agent.email,
+      name: agent.name,
+      avatarUrl: data.avatarUrl,
+    };
+
+    const token = signToken(payload);
+
+    return {
+      token,
+      user: {
+        id: agent.id,
+        name: agent.name,
+        email: agent.email,
+        role: 'AGENT' as const,
+        avatarUrl: data.avatarUrl,
+        shiftStatus: agent.shiftStatus,
+        chatCapacity: agent.chatCapacity,
+        activeChatCount: agent.activeChatCount,
+      },
+    };
+  }
+
+  if (role === 'MANAGER') {
+    const managerId = `mgr-${crypto.createHash('md5').update(cleanEmail).digest('hex').slice(0, 8)}`;
+    const payload: JwtUserPayload = {
+      userId: managerId,
+      role: 'MANAGER',
+      email: cleanEmail,
+      name: cleanName,
+      avatarUrl: data.avatarUrl,
+    };
+
+    const token = signToken(payload);
+
+    return {
+      token,
+      user: {
+        id: managerId,
+        name: cleanName,
+        email: cleanEmail,
+        role: 'MANAGER' as const,
+        avatarUrl: data.avatarUrl,
+      },
+    };
+  }
+
+  const customerId = `cust-${crypto.randomBytes(4).toString('hex')}`;
+  const payload: JwtUserPayload = {
+    userId: customerId,
+    role: 'CUSTOMER',
+    email: cleanEmail,
+    name: cleanName,
+    avatarUrl: data.avatarUrl,
+  };
+
+  const token = signToken(payload);
+
+  return {
+    token,
+    user: {
+      id: customerId,
+      name: cleanName,
+      email: cleanEmail,
+      role: 'CUSTOMER' as const,
+      avatarUrl: data.avatarUrl,
+    },
+  };
+}
 
 export async function loginAgent(email: string) {
   if (!email || typeof email !== 'string') {

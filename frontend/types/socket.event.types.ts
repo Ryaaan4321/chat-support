@@ -79,11 +79,13 @@ export interface AgentInfo {
   chatCapacity: number;
   activeChatCount: number;
   lastSeenAt?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface ChatItem {
   id: string;
   customerId: string;
+  customerAvatar?: string | null;
   status: ChatStatus;
   assignedAgentId?: string | null;
   queuedAt?: string;

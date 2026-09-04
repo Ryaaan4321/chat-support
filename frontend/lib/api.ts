@@ -9,12 +9,15 @@ import {
   UserProfileResponse,
   HealthCheckResponse,
   ApiErrorResponse,
+  SignupRequest,
+  SignupResponse,
 } from '../types/api.types';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4001';
 
 const TOKEN_KEY = 'swish_auth_token';
+const ROLE_KEY = 'swish_user_role';
 
 export class ApiError extends Error {
   statusCode: number;
@@ -33,14 +36,35 @@ export function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+export function getStoredRole(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(ROLE_KEY);
+}
+
 export function setStoredToken(token: string): void {
+  setStoredAuth(token);
+}
+
+export function setStoredAuth(token: string, role?: string): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(TOKEN_KEY, token);
+  document.cookie = `swish_auth_token=${encodeURIComponent(token)}; path=/; max-age=604800; SameSite=Lax`;
+  if (role) {
+    localStorage.setItem(ROLE_KEY, role);
+    document.cookie = `swish_user_role=${encodeURIComponent(role)}; path=/; max-age=604800; SameSite=Lax`;
+  }
 }
 
 export function clearStoredToken(): void {
+  clearStoredAuth();
+}
+
+export function clearStoredAuth(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(ROLE_KEY);
+  document.cookie = 'swish_auth_token=; path=/; max-age=0; SameSite=Lax';
+  document.cookie = 'swish_user_role=; path=/; max-age=0; SameSite=Lax';
 }
 
 async function request<T>(
@@ -89,13 +113,24 @@ export const api = {
   },
 
   auth: {
+    signup: async (data: SignupRequest): Promise<SignupResponse> => {
+      const res = await request<SignupResponse>('/api/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      if (res.token) {
+        setStoredAuth(res.token, res.user.role);
+      }
+      return res;
+    },
+
     loginAgent: async (data: LoginAgentRequest): Promise<LoginAgentResponse> => {
       const res = await request<LoginAgentResponse>('/api/auth/agent/login', {
         method: 'POST',
         body: JSON.stringify(data),
       });
       if (res.token) {
-        setStoredToken(res.token);
+        setStoredAuth(res.token, 'AGENT');
       }
       return res;
     },
@@ -106,7 +141,7 @@ export const api = {
         body: JSON.stringify(data),
       });
       if (res.token) {
-        setStoredToken(res.token);
+        setStoredAuth(res.token, 'MANAGER');
       }
       return res;
     },
@@ -119,7 +154,7 @@ export const api = {
         body: JSON.stringify(data),
       });
       if (res.token) {
-        setStoredToken(res.token);
+        setStoredAuth(res.token, 'CUSTOMER');
       }
       return res;
     },
@@ -133,7 +168,7 @@ export const api = {
     },
 
     logout: (): void => {
-      clearStoredToken();
+      clearStoredAuth();
     },
   },
 };
