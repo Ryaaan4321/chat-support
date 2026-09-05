@@ -9,12 +9,11 @@ Swish Desk is an enterprise customer support operations platform engineered for 
 2. [Tech Stack](#tech-stack)
 3. [Agent Assignment Engine](#agent-assignment-engine)
 4. [Concurrency Challenges & Solutions](#concurrency-challenges--solutions)
-5. [Backend Engineering Challenges & Fixes](#backend-engineering-challenges--fixes)
-6. [Real-Time WebSocket Protocol](#real-time-websocket-protocol)
-7. [Frontend Architecture & Role Protection](#frontend-architecture--role-protection)
-8. [Database Schema](#database-schema)
-9. [Local Setup & Running](#local-setup--running)
-10. [Verification & Test Suites](#verification--test-suites)
+5. [Real-Time WebSocket Protocol](#real-time-websocket-protocol)
+6. [Frontend Architecture & Role Protection](#frontend-architecture--role-protection)
+7. [Database Schema](#database-schema)
+8. [Local Setup & Running](#local-setup--running)
+9. [Verification & Test Suites](#verification--test-suites)
 
 ---
 
@@ -165,6 +164,7 @@ High-volume customer support systems face race conditions, deadlocks, and over-a
 - **Stale Agent Sweeper**: Automatically marks agents as `OFFLINE` if no heartbeat is received within 45 seconds (`sweepStaleAgents`).
 - **Waiting Queue Sweeper**: Periodically sweeps any unassigned waiting chats every 10 seconds to recover from any edge-case network dropouts (`sweepWaitingChats`).
 
+---
 
 ## Real-Time WebSocket Protocol
 
