@@ -71,3 +71,37 @@ export interface ApiErrorResponse {
   message?: string;
   statusCode?: number;
 }
+export interface ChatMessage {
+  id?: string;
+  chatId?: string;
+  senderType: 'AGENT' | 'CUSTOMER';
+  text: string;
+  sentAt: string;
+}
+export interface ActiveChatResponse {
+  chats: Array<{
+    id: string;
+    customerId: string;
+    status: 'WAITING' | 'ACTIVE' | 'CLOSED';
+    assignedAgentId?: string | null;
+    queuedAt: string;
+    assignedAt?: string | null;
+    messages: ChatMessage[];
+  }>;
+}
+export interface SingleChatResponse {
+  chat: {
+    id: string;
+    customerId: string;
+    status: 'WAITING' | 'ACTIVE' | 'CLOSED';
+    assignedAgentId?: string | null;
+    queuedAt: string;
+    assignedAt?: string | null;
+    messages: ChatMessage[];
+    agent?: {
+      id: string;
+      name: string;
+      email: string;
+    } | null;
+  };
+}

@@ -11,12 +11,14 @@ export function AgentWorkspace() {
   const selected = useDesk((s) => s.selectedChatId);
   const mobileThread = useDesk((s) => s.mobileShowThread);
   const chats = useMyActiveChats();
+  const initSocketSession = useDesk((s) => s.initSocketSession);
   const showThread = Boolean(selected && mobileThread);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    initSocketSession();
+  }, [initSocketSession]);
 
   return (
     <div className="flex h-screen min-h-0 w-full max-w-full flex-col bg-[#F8FAFC] text-[#0F172A] overflow-hidden">

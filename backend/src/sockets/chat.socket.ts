@@ -14,6 +14,35 @@ import { AppError } from '../../lib/errors';
 type IoServer = Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 type IoSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 
+async function emitAssignment(io: IoServer, chatId: string, customerId: string, agentId: string, assignedAt: Date) {
+  let agentName = 'Support Agent';
+  if (prisma.agent && typeof prisma.agent.findUnique === 'function') {
+    try {
+      const agent = await prisma.agent.findUnique({
+        where: { id: agentId },
+        select: { id: true, name: true, email: true },
+      });
+      if (agent?.name) {
+        agentName = agent.name;
+      }
+    } catch {
+      agentName = 'Support Agent';
+    }
+  }
+
+  const payload = {
+    chatId,
+    customerId,
+    agentId,
+    agentName,
+    assignedAt: assignedAt.toISOString(),
+  };
+
+  await io.in(`agent:${agentId}`).socketsJoin(`chat:${chatId}`);
+  io.to(`agent:${agentId}`).emit('chat:assigned', payload);
+  io.to(`chat:${chatId}`).emit('chat:assigned', payload);
+}
+
 export function registerChatHandlers(io: IoServer, socket: IoSocket) {
   socket.on('chat:new', async ({ customerId }) => {
     try {
@@ -27,15 +56,14 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
 
       const result = await onNewChat(chat.id);
 
-      if (result) {
-        const payload = {
-          chatId: result.id,
-          agentId: result.assignedAgentId as string,
-          assignedAt: (result.assignedAt as Date).toISOString(),
-        };
-        await io.in(`agent:${result.assignedAgentId}`).socketsJoin(`chat:${chat.id}`);
-        io.to(`agent:${result.assignedAgentId}`).emit('chat:assigned', payload);
-        io.to(`chat:${chat.id}`).emit('chat:assigned', payload);
+      if (result && result.assignedAgentId) {
+        await emitAssignment(
+          io,
+          result.id,
+          result.customerId,
+          result.assignedAgentId,
+          (result.assignedAt as Date) || new Date()
+        );
       } else {
         io.to(`chat:${chat.id}`).emit('chat:queued', { chatId: chat.id, position: 0 });
       }
@@ -107,14 +135,13 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
       if (agentId) {
         const next = await onAgentFreedUp(agentId);
         if (next) {
-          const payload = {
-            chatId: next.id,
-            agentId,
-            assignedAt: (next.assignedAt as Date).toISOString(),
-          };
-          await io.in(`agent:${agentId}`).socketsJoin(`chat:${next.id}`);
-          io.to(`agent:${agentId}`).emit('chat:assigned', payload);
-          io.to(`chat:${next.id}`).emit('chat:assigned', payload);
+          await emitAssignment(
+            io,
+            next.id,
+            next.customerId || 'cust-unknown',
+            next.assignedAgentId || agentId,
+            (next.assignedAt as Date) || new Date()
+          );
         }
       }
     } catch (err) {
@@ -131,15 +158,14 @@ export async function sweepWaitingChats(io: IoServer) {
 
   for (const chat of waitingChats) {
     const result = await onNewChat(chat.id);
-    if (result) {
-      const payload = {
-        chatId: result.id,
-        agentId: result.assignedAgentId as string,
-        assignedAt: (result.assignedAt as Date).toISOString(),
-      };
-      await io.in(`agent:${result.assignedAgentId}`).socketsJoin(`chat:${chat.id}`);
-      io.to(`agent:${result.assignedAgentId}`).emit('chat:assigned', payload);
-      io.to(`chat:${chat.id}`).emit('chat:assigned', payload);
+    if (result && result.assignedAgentId) {
+      await emitAssignment(
+        io,
+        result.id,
+        result.customerId,
+        result.assignedAgentId,
+        (result.assignedAt as Date) || new Date()
+      );
     }
   }
 }

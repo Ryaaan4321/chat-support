@@ -8,6 +8,7 @@ import { registerAgentHandlers, sweepStaleAgents } from './sockets/agent.socket'
 import { authenticateSocket } from './middlewares/auth.middleware';
 import { errorHandler } from './middlewares/error.middleware';
 import authRoutes from './routes/auth.routes';
+import chatRoutes from './routes/chat.routes';
 import { logger } from '../lib/logger';
 import { AppError } from '../lib/errors';
 
@@ -35,6 +36,7 @@ export function createRealtimeServer() {
   });
 
   app.use('/api/auth', authRoutes);
+  app.use('/api/chats', chatRoutes);
 
   app.use(errorHandler);
 

@@ -3,15 +3,6 @@ import { AgentIdRow, AgentCapacityRow, ChatIdRow } from '../../types/agent.types
 
 export async function claimAgentForChat(chatId: string) {
   try {
-    /*
-    understanding what is happening in the below query:
-    we are locking the row because 
-     -- suppose there are two chats want to claim for the agent with name chat-a 
-        and chat-b and if we are not locking them up and not using SKIP than they will
-        wait untill this transaction completes or fails which can create the deadlock.
-        hence that's what it prevents if there is a chat-a that has already LOCK the row
-        than chat-b will SKIP the row and will try to find the next available agent.
-    */
     return await prisma.$transaction(
       async (tx) => {
         const [agent] = await tx.$queryRaw<AgentIdRow[]>`

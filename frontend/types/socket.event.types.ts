@@ -15,7 +15,9 @@ export interface ChatNewPayload {
 
 export interface ChatAssignedPayload {
   chatId: string;
+  customerId?: string;
   agentId: string;
+  agentName?: string;
   assignedAt: string;
 }
 

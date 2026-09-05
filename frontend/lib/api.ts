@@ -11,6 +11,8 @@ import {
   ApiErrorResponse,
   SignupRequest,
   SignupResponse,
+  ActiveChatResponse,
+  SingleChatResponse,
 } from '../types/api.types';
 
 const API_BASE_URL =
@@ -169,6 +171,20 @@ export const api = {
 
     logout: (): void => {
       clearStoredAuth();
+    },
+  },
+
+  chats: {
+    getMyActive: async (): Promise<ActiveChatResponse> => {
+      return request<ActiveChatResponse>('/api/chats/my-active', { method: 'GET' });
+    },
+
+    getChat: async (chatId: string): Promise<SingleChatResponse> => {
+      return request<SingleChatResponse>(`/api/chats/${chatId}`, { method: 'GET' });
+    },
+
+    getQueue: async (): Promise<{ queue: any[] }> => {
+      return request<{ queue: any[] }>('/api/chats/queue', { method: 'GET' });
     },
   },
 };

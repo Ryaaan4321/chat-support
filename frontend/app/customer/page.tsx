@@ -1,110 +1,466 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import { AppHeader } from '@/components/desk/app-header';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textare';
-import { Clock, Send, MessageSquare, CheckCircle2 } from 'lucide-react';
+import {
+  Clock,
+  Send,
+  MessageSquare,
+  CheckCircle2,
+  Headphones,
+  Sparkles,
+  RotateCcw,
+  Loader2,
+} from 'lucide-react';
+import { api, getStoredToken } from '@/lib/api';
+import { createSocketClient, TypedSocket } from '@/lib/socket';
+
+interface ChatMessage {
+  senderType: 'CUSTOMER' | 'AGENT';
+  text: string;
+  sentAt: string;
+}
+
+const ISSUE_TAGS = [
+  'Order Delayed',
+  'Missing Item',
+  'Food Quality',
+  'Payment & Refund',
+  'Driver Contact',
+];
+
+const CANNED_CUSTOMER_QUERIES = [
+  'Where is my food delivery driver right now?',
+  'One of the items in my order was missing.',
+  'Can I cancel and get a full refund?',
+  'Thank you, that solved my issue!',
+];
 
 export default function CustomerPage() {
+  const [customerId, setCustomerId] = useState('cust-guest');
+  const [customerName, setCustomerName] = useState('Customer');
+  const [customerAvatar, setCustomerAvatar] = useState('/avatars/avatar-1.png');
+
   const [prompt, setPrompt] = useState('');
-  const [customerId, setCustomerId] = useState('cust-alex-99');
-  const [submitted, setSubmitted] = useState(false);
-  const [waitingCount, setWaitingCount] = useState(1);
+  const [selectedTag, setSelectedTag] = useState(ISSUE_TAGS[0]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [chatId, setChatId] = useState<string | null>(null);
+  const [sessionState, setSessionState] = useState<'IDLE' | 'QUEUED' | 'ACTIVE' | 'CLOSED'>('IDLE');
+  const [assignedAgentName, setAssignedAgentName] = useState<string | null>(null);
+  const [assignedAgentId, setAssignedAgentId] = useState<string | null>(null);
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputText, setInputText] = useState('');
+  const [socket, setSocket] = useState<TypedSocket | null>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  useEffect(() => {
+    api.auth
+      .getMe()
+      .then((res) => {
+        if (res?.user) {
+          setCustomerId(res.user.id);
+          setCustomerName(res.user.name || res.user.email || 'Customer');
+          if (res.user.avatarUrl) {
+            setCustomerAvatar(res.user.avatarUrl);
+          }
+        }
+      })
+      .catch(() => {
+        const stored = typeof window !== 'undefined' ? localStorage.getItem('swish_customer_id') : null;
+        if (stored) {
+          setCustomerId(stored);
+        } else {
+          const generated = `cust-${Math.random().toString(36).slice(2, 8)}`;
+          setCustomerId(generated);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('swish_customer_id', generated);
+          }
+        }
+      });
+  }, []);
+
+  const handleStartChat = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt.trim()) return;
+    const initialText = prompt.trim() || `Issue: ${selectedTag}`;
 
-    setSubmitted(true);
-    setWaitingCount((prev) => prev + 1);
+    const token = getStoredToken() || undefined;
+    const client = createSocketClient({
+      role: 'CUSTOMER',
+      userId: customerId,
+      token,
+    });
+
+    setSocket(client);
+    setSessionState('QUEUED');
+
+    client.on('chat:queued', (payload) => {
+      setChatId(payload.chatId);
+      setSessionState('QUEUED');
+    });
+
+    client.on('chat:assigned', (payload) => {
+      setChatId(payload.chatId);
+      setSessionState('ACTIVE');
+      setAssignedAgentId(payload.agentId);
+      setAssignedAgentName((payload as any).agentName || 'Agent Support');
+    });
+
+    client.on('chat:message', (payload) => {
+      setMessages((prev) => {
+        const exists = prev.some((m) => m.text === payload.text && m.sentAt === payload.sentAt);
+        if (exists) return prev;
+        return [
+          ...prev,
+          {
+            senderType: payload.senderType,
+            text: payload.text,
+            sentAt: payload.sentAt,
+          },
+        ];
+      });
+    });
+
+    client.on('chat:closed', () => {
+      setSessionState('CLOSED');
+    });
+
+    client.emit('chat:new', { customerId });
+
+    if (initialText) {
+      setTimeout(() => {
+        setMessages([
+          {
+            senderType: 'CUSTOMER',
+            text: initialText,
+            sentAt: new Date().toISOString(),
+          },
+        ]);
+      }, 300);
+    }
+  };
+
+  useEffect(() => {
+    if (chatId && sessionState === 'ACTIVE' && prompt.trim() && socket?.connected) {
+      socket.emit('chat:message', {
+        chatId,
+        senderType: 'CUSTOMER',
+        text: prompt.trim(),
+        sentAt: new Date().toISOString(),
+      });
+      setPrompt('');
+    }
+  }, [chatId, sessionState, socket]);
+
+  const handleSendMessage = () => {
+    const trimmed = inputText.trim();
+    if (!trimmed || !chatId || !socket?.connected) return;
+
+    const sentAt = new Date().toISOString();
+    socket.emit('chat:message', {
+      chatId,
+      senderType: 'CUSTOMER',
+      text: trimmed,
+      sentAt,
+    });
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        senderType: 'CUSTOMER',
+        text: trimmed,
+        sentAt,
+      },
+    ]);
+
+    setInputText('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  const handleResetChat = () => {
+    if (socket) {
+      socket.disconnect();
+    }
+    setChatId(null);
+    setSessionState('IDLE');
+    setMessages([]);
     setPrompt('');
+    setInputText('');
+    setAssignedAgentName(null);
+    setAssignedAgentId(null);
   };
 
   return (
     <div className="min-h-dvh w-full max-w-full flex flex-col bg-[#F8FAFC] text-[#0F172A] overflow-x-hidden">
       <AppHeader />
-      <main className="flex-1 w-full max-w-full min-w-0 px-3 py-4 sm:p-6 md:p-8 flex flex-col items-center justify-start sm:justify-center overflow-y-auto">
-        <div className="w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-4 sm:p-6 md:p-8 shadow-xs space-y-5 my-auto min-w-0">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-[#EFF6FF] border border-[#BFDBFE] flex items-center justify-center text-[#2563EB] shrink-0">
-              <MessageSquare className="size-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-base font-bold text-[#0F172A] truncate">
-                Customer Support Queue
-              </h1>
-              <p className="text-xs text-[#64748B] truncate">
-                High-concurrency instant agent matching
-              </p>
-            </div>
-          </div>
 
-          {submitted ? (
-            <div className="rounded-xl bg-[#F8FAFC] border border-emerald-200 p-4 sm:p-5 text-center space-y-3">
-              <div className="size-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
-                <CheckCircle2 className="size-5" />
-              </div>
-              <h2 className="text-sm font-semibold text-[#0F172A]">Queued in Priority Line</h2>
-              <p className="text-xs text-[#64748B] leading-relaxed">
-                Your request has been placed in the queue. An available specialist will claim your session automatically.
-              </p>
-              <Button
-                onClick={() => setSubmitted(false)}
-                variant="outline"
-                size="sm"
-                className="w-full mt-2 cursor-pointer text-xs"
-              >
-                Queue Another Request
-              </Button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#475569] uppercase tracking-wider mb-1.5">
-                  Customer Identifier
-                </label>
-                <input
-                  type="text"
-                  value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                  className="w-full min-w-0 bg-white border border-[#E2E8F0] rounded-xl px-3.5 py-2 text-xs md:text-sm text-[#0F172A] focus:border-[#2563EB] outline-none transition-all box-border"
-                  required
+      <main className="flex-1 w-full max-w-full min-w-0 px-3 py-3 sm:p-5 md:p-6 flex flex-col items-center justify-center overflow-y-auto">
+        {sessionState === 'IDLE' ? (
+          <div className="w-full max-w-lg bg-white border border-[#E2E8F0] rounded-2xl p-5 sm:p-7 shadow-xs space-y-6 my-auto min-w-0">
+            <div className="flex items-center gap-3.5">
+              <div className="size-12 rounded-full relative overflow-hidden bg-[#EFF6FF] border border-[#BFDBFE] shrink-0">
+                <Image
+                  src={customerAvatar}
+                  alt={customerName}
+                  fill
+                  sizes="48px"
+                  className="object-cover"
                 />
               </div>
+              <div className="min-w-0">
+                <h1 className="text-base font-bold text-[#0F172A] truncate">
+                  Hello, {customerName}
+                </h1>
+                <p className="text-xs text-[#64748B] truncate">
+                  Connect live with our fast dedicated support team
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleStartChat} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#475569] uppercase tracking-wider mb-2">
+                  What can we help you with?
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {ISSUE_TAGS.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => setSelectedTag(tag)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                        selectedTag === tag
+                          ? 'bg-[#2563EB] text-white shadow-xs'
+                          : 'bg-[#F1F5F9] text-[#475569] hover:bg-[#E2E8F0]'
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <div>
                 <label className="block text-xs font-semibold text-[#475569] uppercase tracking-wider mb-1.5">
-                  How can we help you?
+                  Describe the issue
                 </label>
                 <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Describe your issue with order, refund, or delivery..."
-                  rows={4}
+                  placeholder={`Tell us details about ${selectedTag.toLowerCase()}...`}
+                  rows={3}
                   className="w-full min-w-0 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] rounded-xl text-xs box-border"
-                  required
                 />
               </div>
 
               <Button
                 type="submit"
-                className="w-full h-10 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] font-semibold text-xs text-white shadow-xs cursor-pointer"
+                className="w-full h-11 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] font-semibold text-xs text-white shadow-xs cursor-pointer flex items-center justify-center gap-2"
               >
-                <Send className="size-3.5" />
-                <span>Join Support Queue</span>
+                <Headphones className="size-4" />
+                <span>Start Live Chat Support</span>
               </Button>
             </form>
-          )}
 
-          <div className="border-t border-[#E2E8F0] pt-3.5 flex flex-wrap items-center justify-between gap-2 text-xs text-[#64748B]">
-            <span className="flex items-center gap-1.5 font-mono text-[11px] sm:text-xs">
-              <Clock className="size-3.5 text-[#2563EB] shrink-0" />
-              <span>Queue: {waitingCount} waiting</span>
-            </span>
-            <span className="font-semibold text-emerald-600 text-[11px] sm:text-xs">Avg wait &lt; 10s</span>
+            <div className="border-t border-[#E2E8F0] pt-3.5 flex items-center justify-between text-xs text-[#64748B]">
+              <span className="flex items-center gap-1.5 font-mono text-[11px] sm:text-xs">
+                <Clock className="size-3.5 text-[#2563EB] shrink-0" />
+                <span>Live Agent Assignment</span>
+              </span>
+              <span className="font-semibold text-emerald-600 text-[11px] sm:text-xs">
+                Instant Response
+              </span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="w-full max-w-2xl h-[84vh] min-h-[500px] bg-white border border-[#E2E8F0] rounded-2xl shadow-sm flex flex-col overflow-hidden my-auto">
+            <header className="flex h-14 items-center justify-between border-b border-[#E2E8F0] px-3.5 sm:px-5 shrink-0 bg-white gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="size-9 rounded-full relative overflow-hidden bg-[#EFF6FF] border border-[#BFDBFE] shrink-0">
+                  <Image
+                    src={sessionState === 'ACTIVE' ? '/avatars/avatar-2.png' : customerAvatar}
+                    alt="Agent"
+                    fill
+                    sizes="36px"
+                    className="object-cover"
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xs sm:text-sm font-semibold text-[#0F172A] truncate max-w-[130px] sm:max-w-[240px]">
+                      {sessionState === 'ACTIVE'
+                        ? assignedAgentName || 'Agent Support'
+                        : sessionState === 'QUEUED'
+                        ? 'Priority Support Line'
+                        : 'Session Closed'}
+                    </h2>
+
+                    {sessionState === 'ACTIVE' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold shrink-0">
+                        <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>Live</span>
+                      </span>
+                    ) : sessionState === 'QUEUED' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold shrink-0">
+                        <Loader2 className="size-3 animate-spin text-amber-600" />
+                        <span>Matching</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-semibold shrink-0">
+                        <span>Resolved</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] font-mono text-[#94A3B8] truncate">
+                    {chatId ? `Session ID: ${chatId.slice(0, 8)}` : 'Connecting...'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetChat}
+                className="flex items-center gap-1 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg bg-[#F1F5F9] hover:bg-slate-200 border border-[#E2E8F0] text-xs font-medium text-[#475569] transition-all cursor-pointer shrink-0"
+              >
+                <RotateCcw className="size-3.5 shrink-0" />
+                <span>End</span>
+              </button>
+            </header>
+
+            {sessionState === 'QUEUED' && (
+              <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between text-xs text-amber-800">
+                <span className="flex items-center gap-1.5">
+                  <Clock className="size-3.5 text-amber-600 shrink-0" />
+                  <span>You are #1 in line. Assigning to the next available specialist...</span>
+                </span>
+                <span className="font-semibold">&lt; 15s</span>
+              </div>
+            )}
+
+            {sessionState === 'CLOSED' && (
+              <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-3 flex items-center justify-between text-xs text-emerald-800">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                  <span>This chat has been resolved and closed by your support agent.</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleResetChat}
+                  className="px-2.5 py-1 rounded-md bg-emerald-600 text-white font-semibold text-xs hover:bg-emerald-700 cursor-pointer"
+                >
+                  New Request
+                </button>
+              </div>
+            )}
+
+            <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-5 space-y-3.5 bg-[#F8FAFC]">
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center p-8 text-center text-[#94A3B8] h-48">
+                  <MessageSquare className="size-8 mb-2 opacity-50 text-[#2563EB]" />
+                  <p className="text-xs">Your support chat is ready. Send a message to start.</p>
+                </div>
+              )}
+
+              {messages.map((m, idx) => {
+                const isCustomer = m.senderType === 'CUSTOMER';
+                const avatar = isCustomer ? customerAvatar : '/avatars/avatar-2.png';
+                const senderTitle = isCustomer ? 'You' : assignedAgentName || 'Support Agent';
+
+                return (
+                  <div
+                    key={idx}
+                    className={`flex gap-2 items-end max-w-[88%] sm:max-w-[80%] ${
+                      isCustomer ? 'ml-auto flex-row-reverse' : 'mr-auto flex-row'
+                    }`}
+                  >
+                    <div className="size-7 rounded-full relative overflow-hidden bg-white border border-[#E2E8F0] shrink-0 mb-1">
+                      <Image
+                        src={avatar}
+                        alt={senderTitle}
+                        fill
+                        sizes="28px"
+                        className="object-cover"
+                      />
+                    </div>
+
+                    <div className={`flex flex-col ${isCustomer ? 'items-end' : 'items-start'}`}>
+                      <div className="flex items-center gap-1.5 mb-1 px-1 text-[10px] font-mono text-[#94A3B8]">
+                        <span>{senderTitle}</span>
+                        <span>•</span>
+                        <span>{new Date(m.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <div
+                        className={`rounded-2xl px-3.5 py-2 text-xs md:text-sm leading-relaxed break-words shadow-2xs ${
+                          isCustomer
+                            ? 'bg-[#2563EB] text-white rounded-br-xs font-normal'
+                            : 'bg-white text-[#0F172A] border border-[#E2E8F0] rounded-bl-xs'
+                        }`}
+                      >
+                        {m.text}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <div className="border-t border-[#E2E8F0] p-3 sm:p-3.5 bg-white shrink-0 space-y-2">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                {CANNED_CUSTOMER_QUERIES.map((query, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    disabled={sessionState === 'CLOSED'}
+                    onClick={() => setInputText(query)}
+                    className="text-[11px] font-medium whitespace-nowrap rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] px-2.5 py-1 text-[#475569] hover:bg-[#EFF6FF] hover:border-[#BFDBFE] hover:text-[#2563EB] transition-all shrink-0 cursor-pointer disabled:opacity-40"
+                  >
+                    {query}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-end gap-2">
+                <Textarea
+                  value={inputText}
+                  disabled={sessionState === 'CLOSED'}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={
+                    sessionState === 'CLOSED'
+                      ? 'Chat has been closed. Click End to start a new chat.'
+                      : 'Type your message (Press Enter to send)...'
+                  }
+                  className="min-h-[56px] bg-white border-[#E2E8F0] text-[#0F172A] placeholder-[#94A3B8] rounded-xl text-xs p-2.5 focus:border-[#2563EB] disabled:bg-slate-50"
+                />
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={!inputText.trim() || sessionState === 'CLOSED'}
+                  className="h-10 px-4 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white shrink-0 shadow-xs disabled:opacity-40 cursor-pointer flex items-center gap-1.5"
+                >
+                  <Send className="size-3.5" />
+                  <span className="text-xs font-semibold">Send</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
