@@ -165,36 +165,6 @@ High-volume customer support systems face race conditions, deadlocks, and over-a
 - **Stale Agent Sweeper**: Automatically marks agents as `OFFLINE` if no heartbeat is received within 45 seconds (`sweepStaleAgents`).
 - **Waiting Queue Sweeper**: Periodically sweeps any unassigned waiting chats every 10 seconds to recover from any edge-case network dropouts (`sweepWaitingChats`).
 
----
-
-## Backend Engineering Challenges & Fixes
-
-During system implementation, several subtle infrastructure and TypeScript obstacles were diagnosed and resolved:
-
-### 1. Database Access Denied (Prisma Error P1010)
-- **Problem**: When starting the server via `npm run dev`, Prisma threw:
-  `User was denied access on the database (not available): Invalid prisma.chat.findMany() invocation` (P1010).
-- **Root Cause**: `@prisma/adapter-pg` and `lib/prisma.ts` were initializing before `dotenv/config` was loaded into the Node process. `process.env.DATABASE_URL` evaluated to `undefined`, prompting the PG driver to fall back to a local PostgreSQL connection with the default OS user (`aryan`) instead of the remote Neon database.
-- **Resolution**: Added `import 'dotenv/config';` as the first statement in `server.ts` and `lib/prisma.ts`.
-
-### 2. Express TypeScript Request Property Resolution
-- **Problem**: In `auth.controller.ts`, accessing `req.user` in `getProfileHandler` caused TypeScript compilation error TS2339 (`Property 'user' does not exist on type 'Request'`).
-- **Root Cause**: Ambient global interface merging (`declare global { namespace Express { interface Request { user?: JwtUserPayload } } }`) was isolated in `auth.middleware.ts` and not guaranteed to be evaluated before `auth.controller.ts` by the standalone compiler.
-- **Resolution**: Explicitly exported `AuthenticatedRequest extends Request` from `auth.middleware.ts` and typed the controller parameter as `req: AuthenticatedRequest`.
-
-### 3. API Response Shape Discrepancy
-- **Problem**: Backend controllers returned `{ success: true, data: result }`, while some frontend consumers expected root-level properties (`res.token`, `res.user`, `res.agents`).
-- **Resolution**: Standardized all controller responses to spread both root attributes and the `data` wrapper:
-  ```typescript
-  res.status(200).json({ success: true, ...result, data: result });
-  ```
-
-### 4. Unit Test Mocking Boundaries
-- **Problem**: Unit tests for socket handlers failed with `Cannot read properties of undefined (reading 'findUnique')`.
-- **Root Cause**: The unit test mocked `prisma.chat` and `prisma.message` but omitted `prisma.agent`.
-- **Resolution**: Made `emitAssignment` defensively check `prisma.agent && typeof prisma.agent.findUnique === 'function'`, ensuring compatibility across real database calls and unit test harnesses.
-
----
 
 ## Real-Time WebSocket Protocol
 
