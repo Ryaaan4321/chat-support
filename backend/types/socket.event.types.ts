@@ -9,6 +9,8 @@ export interface ChatAssignedPayload {
   assignedAt: string; 
 }
 export interface ChatMessagePayload {
+  id?: string;
+  clientTempId?: string;
   chatId: string;
   senderType: 'AGENT' | 'CUSTOMER';
   text: string;
@@ -23,11 +25,18 @@ export interface AgentStatusChangedPayload {
   agentId: string;
   shiftStatus: 'OFFLINE' | 'AVAILABLE' | 'ON_BREAK' | 'WRAP_UP' | 'SHIFT_ENDED';
 }
+export interface AgentCapacityChangedPayload {
+  agentId: string;
+  chatCapacity: number;
+}
 export interface ChatSyncPayload {
   chatId: string;
   status: 'WAITING' | 'ACTIVE' | 'CLOSED';
   agentId: string | null;
+  agentName?: string;
   messages: Array<{
+    id?: string;
+    clientTempId?: string;
     senderType: 'AGENT' | 'CUSTOMER';
     text: string;
     sentAt: string;
@@ -41,6 +50,7 @@ export interface ServerToClientEvents {
   'chat:sync': (payload: ChatSyncPayload) => void;
   'chat:rejoin_failed': (payload: { chatId: string }) => void;
   'agent:status_changed': (payload: AgentStatusChangedPayload) => void;
+  'agent:capacity_changed': (payload: AgentCapacityChangedPayload) => void;
 }
 export interface ClientToServerEvents {
   'chat:new': (payload: ChatNewPayload) => void;
@@ -48,6 +58,7 @@ export interface ClientToServerEvents {
   'chat:message': (payload: ChatMessagePayload) => void;
   'chat:closed': (payload: { chatId: string }) => void;
   'agent:status_changed': (payload: AgentStatusChangedPayload) => void;
+  'agent:capacity_changed': (payload: AgentCapacityChangedPayload) => void;
 }
 export interface InterServerEvents {
   ping: () => void;

@@ -7,7 +7,9 @@ import {
   getProfile,
 } from '../services/auth.service';
 import { listAgents } from '../repositories/auth.repository';
+import { updateAgentCapacity } from '../repositories/agent.repositories';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
+
 
 export async function signupHandler(req: Request, res: Response, next: NextFunction) {
   try {
@@ -68,3 +70,19 @@ export async function listAgentsHandler(req: Request, res: Response, next: NextF
     next(err);
   }
 }
+
+export async function updateAgentCapacityHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : (req.params.id as string);
+    const { chatCapacity } = req.body;
+    if (!id || !chatCapacity) {
+      return res.status(400).json({ success: false, error: 'Agent id and chatCapacity are required' });
+    }
+    const updated = await updateAgentCapacity(id, Number(chatCapacity));
+    res.status(200).json({ success: true, agent: updated, data: updated });
+  } catch (err) {
+    next(err);
+  }
+}
+
+

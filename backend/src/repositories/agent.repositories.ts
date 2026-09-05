@@ -116,3 +116,37 @@ export async function closeChatAndRelease(chatId: string): Promise<{ agentId: st
     throw err;
   }
 }
+
+export async function updateAgentCapacity(agentId: string, chatCapacity: number) {
+  const clamped = Math.max(1, Math.min(10, chatCapacity));
+  return await prisma.agent.update({
+    where: { id: agentId },
+    data: { chatCapacity: clamped },
+  });
+}
+
+export async function reconcileAgentActiveChatCount(agentId?: string) {
+  try {
+    if (agentId) {
+      const activeCount = await prisma.chat.count({
+        where: { assignedAgentId: agentId, status: 'ACTIVE' },
+      });
+      await prisma.agent.update({
+        where: { id: agentId },
+        data: { activeChatCount: activeCount },
+      });
+      return activeCount;
+    }
+    const agents = await prisma.agent.findMany({ select: { id: true } });
+    for (const agent of agents) {
+      const activeCount = await prisma.chat.count({
+        where: { assignedAgentId: agent.id, status: 'ACTIVE' },
+      });
+      await prisma.agent.update({
+        where: { id: agent.id },
+        data: { activeChatCount: activeCount },
+      });
+    }
+  } catch {}
+}
+

@@ -191,11 +191,36 @@ describe('chat:closed', () => {
       'chat:closed',
       expect.objectContaining({ chatId: 'chat-8', agentId: 'agent-1' }),
     );
+    expect(toEmitters['agent:agent-1'].emit).toHaveBeenCalledWith(
+      'chat:closed',
+      expect.objectContaining({ chatId: 'chat-8', agentId: 'agent-1' }),
+    );
     expect(mockOnAgentFreedUp).toHaveBeenCalledWith('agent-1');
     expect(inRooms['agent:agent-1'].socketsJoin).toHaveBeenCalledWith('chat:chat-9');
     expect(toEmitters['chat:chat-9'].emit).toHaveBeenCalledWith(
       'chat:assigned',
       expect.objectContaining({ chatId: 'chat-9', agentId: 'agent-1' }),
+    );
+  });
+
+  it('notifies both the chat and the agent room when customer initiates the close', async () => {
+    mockCloseChatAndRelease.mockResolvedValue({ agentId: 'agent-4' } as any);
+    mockOnAgentFreedUp.mockResolvedValue(null);
+
+    const { io, toEmitters } = makeFakeIo();
+    const { socket, handlers } = makeFakeSocket({ role: 'CUSTOMER', userId: 'cust-99' });
+    registerChatHandlers(io as any, socket as any);
+
+    await handlers['chat:closed']({ chatId: 'chat-99' });
+
+    expect(mockCloseChatAndRelease).toHaveBeenCalledWith('chat-99');
+    expect(toEmitters['chat:chat-99'].emit).toHaveBeenCalledWith(
+      'chat:closed',
+      expect.objectContaining({ chatId: 'chat-99', agentId: 'agent-4' }),
+    );
+    expect(toEmitters['agent:agent-4'].emit).toHaveBeenCalledWith(
+      'chat:closed',
+      expect.objectContaining({ chatId: 'chat-99', agentId: 'agent-4' }),
     );
   });
 
@@ -210,6 +235,7 @@ describe('chat:closed', () => {
     await handlers['chat:closed']({ chatId: 'chat-10' });
 
     expect(toEmitters['chat:chat-10'].emit).toHaveBeenCalledWith('chat:closed', expect.anything());
+    expect(toEmitters['agent:agent-2'].emit).toHaveBeenCalledWith('chat:closed', expect.anything());
     expect(Object.keys(inRooms)).toHaveLength(0);
   });
 
@@ -224,4 +250,4 @@ describe('chat:closed', () => {
 
     expect(mockOnAgentFreedUp).not.toHaveBeenCalled();
   });
-});
+});

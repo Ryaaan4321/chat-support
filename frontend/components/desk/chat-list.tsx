@@ -11,6 +11,23 @@ export function ChatList() {
   const chats = useMyActiveChats();
   const selectedChatId = useDesk((s) => s.selectedChatId);
   const selectChat = useDesk((s) => s.selectChat);
+  const isHydrating = useDesk((s) => s.isHydrating);
+
+  if (isHydrating) {
+    return (
+      <div className="flex flex-col gap-2 p-2">
+        {[1, 2].map((i) => (
+          <div key={i} className="w-full rounded-xl p-3 border border-[#E2E8F0] bg-white animate-pulse flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <div className="size-7 rounded-full bg-slate-200" />
+              <div className="h-3 w-24 bg-slate-200 rounded" />
+            </div>
+            <div className="h-2.5 w-3/4 bg-slate-100 rounded" />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   if (chats.length === 0) {
     return (
@@ -25,6 +42,7 @@ export function ChatList() {
       </div>
     );
   }
+
 
   return (
     <div className="flex flex-col gap-2 p-2">

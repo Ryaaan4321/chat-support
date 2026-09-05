@@ -7,6 +7,7 @@ import type {
 } from '../../types/socket.event.types';
 import { prisma } from '../../lib/prisma';
 import { onAgentFreedUp } from '../services/assignment.service';
+import { updateAgentCapacity, reconcileAgentActiveChatCount } from '../repositories/agent.repositories';
 import { logger } from '../../lib/logger';
 import { AppError } from '../../lib/errors';
 
@@ -28,6 +29,7 @@ export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
         where: { id: agentId },
         data: { lastSeenAt: new Date() },
       });
+      await reconcileAgentActiveChatCount(agentId);
       const activeChats = await prisma.chat.findMany({
         where: { assignedAgentId: agentId, status: 'ACTIVE' },
       });
@@ -51,6 +53,39 @@ export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
   }, HEARTBEAT_INTERVAL_MS);
 
   socket.on('disconnect', () => clearInterval(heartbeat));
+
+  socket.on('agent:capacity_changed', async ({ agentId: targetId, chatCapacity }) => {
+    try {
+      const targetAgentId = targetId || agentId;
+      if (!targetAgentId || !chatCapacity) {
+        throw AppError.validation('agentId and chatCapacity are required');
+      }
+      const updated = await updateAgentCapacity(targetAgentId, chatCapacity);
+      io.to('managers').emit('agent:capacity_changed', {
+        agentId: targetAgentId,
+        chatCapacity: updated.chatCapacity,
+      });
+      io.to(`agent:${targetAgentId}`).emit('agent:capacity_changed', {
+        agentId: targetAgentId,
+        chatCapacity: updated.chatCapacity,
+      });
+      if (updated.shiftStatus === 'AVAILABLE' && updated.activeChatCount < updated.chatCapacity) {
+        const next = await onAgentFreedUp(targetAgentId);
+        if (next) {
+          const payload = {
+            chatId: next.id,
+            agentId: targetAgentId,
+            assignedAt: ((next.assignedAt as Date) || new Date()).toISOString(),
+          };
+          await io.in(`agent:${targetAgentId}`).socketsJoin(`chat:${next.id}`);
+          io.to(`agent:${targetAgentId}`).emit('chat:assigned', payload);
+          io.to(`chat:${next.id}`).emit('chat:assigned', payload);
+        }
+      }
+    } catch (err) {
+      logger.error({ err: AppError.from(err), agentId }, '[agent:capacity_changed] handler error');
+    }
+  });
 
   socket.on('agent:status_changed', async ({ shiftStatus }) => {
     try {

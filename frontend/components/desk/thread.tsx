@@ -23,6 +23,7 @@ export function Thread() {
   const closeChat = useDesk((s) => s.closeChat);
   const setMobileShowThread = useDesk((s) => s.setMobileShowThread);
   const me = useDesk((s) => s.me);
+  const isHydrating = useDesk((s) => s.isHydrating);
 
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -30,6 +31,16 @@ export function Thread() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chat?.messages]);
+
+  if (isHydrating) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center p-8 text-center bg-[#F8FAFC] animate-pulse">
+        <div className="size-12 rounded-2xl bg-slate-200 mb-3" />
+        <div className="h-4 w-36 bg-slate-200 rounded mb-2" />
+        <div className="h-3 w-52 bg-slate-100 rounded" />
+      </div>
+    );
+  }
 
   if (!chat) {
     return (
@@ -44,6 +55,7 @@ export function Thread() {
       </div>
     );
   }
+
 
   const handleSend = () => {
     const trimmed = input.trim();

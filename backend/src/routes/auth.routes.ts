@@ -6,6 +6,7 @@ import {
   createCustomerSessionHandler,
   getProfileHandler,
   listAgentsHandler,
+  updateAgentCapacityHandler,
 } from '../controllers/auth.controller';
 import { authenticateHttp } from '../middlewares/auth.middleware';
 
@@ -16,6 +17,8 @@ router.post('/agent/login', loginAgentHandler);
 router.post('/manager/login', loginManagerHandler);
 router.post('/customer/session', createCustomerSessionHandler);
 router.get('/agents', listAgentsHandler);
+router.patch('/agents/:id/capacity', updateAgentCapacityHandler);
 router.get('/me', authenticateHttp, getProfileHandler);
 
 export default router;
+

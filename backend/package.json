@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "predev": "node scripts/free-port.js",
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "test": "jest",

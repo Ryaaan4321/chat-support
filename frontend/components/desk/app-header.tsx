@@ -61,7 +61,7 @@ export function AppHeader() {
                 <p className="text-[10px] text-[#64748B]">{isManager ? 'Operations' : me.team}</p>
               </div>
             )}
-            <div className="size-8 rounded-full relative overflow-hidden bg-[#EFF6FF] border border-[#BFDBFE] shrink-0">
+            <div className="hidden sm:block size-8 rounded-full relative overflow-hidden bg-[#EFF6FF] border border-[#BFDBFE] shrink-0">
               <Image
                 src={avatarUrl}
                 alt={me.name || 'User'}
@@ -70,6 +70,7 @@ export function AppHeader() {
                 className="object-cover"
               />
             </div>
+
             <button
               type="button"
               onClick={handleLogout}

@@ -59,8 +59,11 @@ export interface UserProfileResponse {
     email?: string;
     avatarUrl?: string;
     shiftStatus?: ShiftStatus;
+    chatCapacity?: number;
+    activeChatCount?: number;
   };
 }
+
 export interface HealthCheckResponse {
   status: string;
   timestamp: string;

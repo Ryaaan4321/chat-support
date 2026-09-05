@@ -85,12 +85,26 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
         socket.emit('chat:rejoin_failed', { chatId });
         return;
       }
+      let agentName: string | undefined;
+      if (chat.assignedAgentId && prisma.agent && typeof prisma.agent.findUnique === 'function') {
+        try {
+          const agent = await prisma.agent.findUnique({
+            where: { id: chat.assignedAgentId },
+            select: { name: true },
+          });
+          if (agent?.name) {
+            agentName = agent.name;
+          }
+        } catch {}
+      }
       socket.join(`chat:${chat.id}`);
       socket.emit('chat:sync', {
         chatId: chat.id,
         status: chat.status,
         agentId: chat.assignedAgentId,
+        agentName,
         messages: chat.messages.map((m) => ({
+          id: m.id,
           senderType: m.senderType,
           text: m.text,
           sentAt: m.sentAt.toISOString(),
@@ -101,7 +115,7 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
     }
   });
 
-  socket.on('chat:message', async ({ chatId, senderType, text }) => {
+  socket.on('chat:message', async ({ chatId, senderType, text, clientTempId }) => {
     try {
       if (!chatId || !senderType || !text) {
         throw AppError.validation('chatId, senderType, and text are required');
@@ -110,6 +124,8 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
       const message = await prisma.message.create({ data: { chatId, senderType, text } });
 
       io.to(`chat:${chatId}`).emit('chat:message', {
+        id: message.id,
+        clientTempId,
         chatId,
         senderType,
         text,
@@ -127,12 +143,14 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
       }
 
       const { agentId } = await closeChatAndRelease(chatId);
-      io.to(`chat:${chatId}`).emit('chat:closed', {
+      const closedPayload = {
         chatId,
         agentId,
         closedAt: new Date().toISOString(),
-      });
+      };
+      io.to(`chat:${chatId}`).emit('chat:closed', closedPayload);
       if (agentId) {
+        io.to(`agent:${agentId}`).emit('chat:closed', closedPayload);
         const next = await onAgentFreedUp(agentId);
         if (next) {
           await emitAssignment(
@@ -151,21 +169,29 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
 }
 
 export async function sweepWaitingChats(io: IoServer) {
-  const waitingChats = await prisma.chat.findMany({
-    where: { status: 'WAITING' },
-    orderBy: { queuedAt: 'asc' },
-  });
+  try {
+    const waitingChats = await prisma.chat.findMany({
+      where: { status: 'WAITING' },
+      orderBy: { queuedAt: 'asc' },
+    });
 
-  for (const chat of waitingChats) {
-    const result = await onNewChat(chat.id);
-    if (result && result.assignedAgentId) {
-      await emitAssignment(
-        io,
-        result.id,
-        result.customerId,
-        result.assignedAgentId,
-        (result.assignedAt as Date) || new Date()
-      );
+    if (!waitingChats || waitingChats.length === 0) {
+      return;
     }
+
+    for (const chat of waitingChats) {
+      const result = await onNewChat(chat.id);
+      if (result && result.assignedAgentId) {
+        await emitAssignment(
+          io,
+          result.id,
+          result.customerId,
+          result.assignedAgentId,
+          (result.assignedAt as Date) || new Date()
+        );
+      }
+    }
+  } catch (err: any) {
+    logger.warn({ msg: err?.message }, '[sweepWaitingChats] transient error');
   }
 }

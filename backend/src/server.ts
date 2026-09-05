@@ -79,15 +79,38 @@ export function createRealtimeServer() {
 if (require.main === module) {
   const { httpServer, io } = createRealtimeServer();
   const PORT = process.env.SOCKET_PORT ?? 4001;
-  httpServer.listen(PORT, () => {
+
+  const server = httpServer.listen(PORT, () => {
     logger.info({ port: PORT }, `Realtime service listening on :${PORT}`);
   });
 
-  setInterval(() => {
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.error({ port: PORT }, `Port ${PORT} is already in use.`);
+      process.exit(1);
+    }
+  });
+
+  const staleAgentsInterval = setInterval(() => {
     sweepStaleAgents().catch((err) => logger.error({ err: AppError.from(err) }, '[sweepStaleAgents] failed'));
   }, 30_000);
 
-  setInterval(() => {
+  const waitingChatsInterval = setInterval(() => {
     sweepWaitingChats(io).catch((err) => logger.error({ err: AppError.from(err) }, '[sweepWaitingChats] failed'));
   }, 10_000);
+
+  const shutdown = () => {
+    clearInterval(staleAgentsInterval);
+    clearInterval(waitingChatsInterval);
+    io.close();
+    server.close(() => {
+      process.exit(0);
+    });
+    setTimeout(() => {
+      process.exit(0);
+    }, 1000).unref();
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }

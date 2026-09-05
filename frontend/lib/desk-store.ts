@@ -1,7 +1,6 @@
 import React from 'react';
 import { create } from 'zustand';
 import { AgentInfo, ChatItem, ShiftStatus } from '../types/socket.event.types';
-import { INITIAL_AGENTS, INITIAL_CHATS, INITIAL_QUEUED_CHATS } from './mock-data';
 import { createSocketClient, getActiveSocket } from './socket';
 import { api, getStoredToken } from './api';
 
@@ -26,6 +25,8 @@ export interface CustomerObj {
 }
 
 export interface Message {
+  id?: string;
+  clientTempId?: string;
   senderType: 'AGENT' | 'CUSTOMER' | string;
   text: string;
   sentAt: string;
@@ -58,8 +59,10 @@ export interface DeskState {
   filterStatus: string;
   isConnected: boolean;
   socketInitialized: boolean;
+  isHydrating: boolean;
 
   initSocketSession: (agentData?: Partial<AgentProfile>) => Promise<void>;
+  initManagerSession: () => Promise<void>;
   setMeStatus: (status: ShiftStatus) => void;
   setStatus: (status: ShiftStatus) => void;
   selectChat: (chatId: string | null) => void;
@@ -76,47 +79,31 @@ export interface DeskState {
   [key: string]: any;
 }
 
-const initialNormalizedChats: Chat[] = INITIAL_CHATS.map((c) => ({
-  ...c,
-  customer: c.customerId,
-  customerId: c.customerId,
-  customerAvatar: '/avatars/avatar-1.png',
-  unreadCount: c.unreadCount || 0,
-  unread: c.unreadCount || 0,
-}));
-
-const initialNormalizedQueue: Chat[] = INITIAL_QUEUED_CHATS.map((c) => ({
-  ...c,
-  customer: c.customerId,
-  customerId: c.customerId,
-  customerAvatar: '/avatars/avatar-1.png',
-  unreadCount: 0,
-  unread: 0,
-}));
-
 export const useDesk = create<DeskState>((set, get) => ({
   me: {
-    id: 'agent-1',
-    name: 'Sarah Connor',
-    email: 'sarah.c@support.ops',
-    team: 'Tier 2 Escalations',
-    initials: 'SC',
+    id: '',
+    name: 'Support Agent',
+    email: '',
+    team: 'Support Operations',
+    initials: 'AG',
     shiftStatus: 'AVAILABLE',
     chatCapacity: 3,
-    activeChatCount: 2,
+    activeChatCount: 0,
     avatarUrl: '/avatars/avatar-2.png',
   },
-  agents: INITIAL_AGENTS,
-  chats: initialNormalizedChats,
-  queuedChats: initialNormalizedQueue,
-  queue: initialNormalizedQueue,
-  selectedChatId: 'chat-101',
+  agents: [],
+  chats: [],
+  queuedChats: [],
+  queue: [],
+  selectedChatId: null,
   mobileShowThread: false,
   filterStatus: 'ALL',
   isConnected: false,
   socketInitialized: false,
+  isHydrating: true,
 
   initSocketSession: async (agentData?: Partial<AgentProfile>) => {
+    set({ isHydrating: true });
     let currentAgent = get().me;
 
     try {
@@ -137,8 +124,8 @@ export const useDesk = create<DeskState>((set, get) => ({
           team: 'Support Operations',
           initials: initials || 'AG',
           shiftStatus: (u.shiftStatus as ShiftStatus) || 'AVAILABLE',
-          chatCapacity: 3,
-          activeChatCount: 0,
+          chatCapacity: u.chatCapacity ?? 3,
+          activeChatCount: u.activeChatCount ?? 0,
           avatarUrl: u.avatarUrl || '/avatars/avatar-2.png',
         };
         set({ me: currentAgent });
@@ -152,28 +139,35 @@ export const useDesk = create<DeskState>((set, get) => ({
 
     try {
       const activeRes = await api.chats.getMyActive();
-      if (activeRes && Array.isArray(activeRes.chats) && activeRes.chats.length > 0) {
-        const normalizedDbChats: Chat[] = activeRes.chats.map((c) => ({
-          id: c.id,
-          customerId: c.customerId,
-          customer: c.customerId,
-          customerAvatar: '/avatars/avatar-1.png',
-          status: c.status,
-          assignedAgentId: c.assignedAgentId || currentAgent.id,
-          queuedAt: c.queuedAt,
-          assignedAt: c.assignedAt,
-          messages: c.messages || [],
-          unreadCount: 0,
-          unread: 0,
-        }));
+      const rawChats = activeRes && Array.isArray(activeRes.chats) ? activeRes.chats : [];
+      const normalizedDbChats: Chat[] = rawChats.map((c) => ({
+        id: c.id,
+        customerId: c.customerId,
+        customer: c.customerId,
+        customerAvatar: '/avatars/avatar-1.png',
+        status: c.status,
+        assignedAgentId: c.assignedAgentId || currentAgent.id,
+        queuedAt: c.queuedAt,
+        assignedAt: c.assignedAt,
+        messages: (c.messages || []).map((m: any) => ({
+          id: m.id,
+          senderType: m.senderType,
+          text: m.text,
+          sentAt: m.sentAt,
+        })),
+        unreadCount: 0,
+        unread: 0,
+      }));
 
-        set({
-          chats: normalizedDbChats,
-          selectedChatId: normalizedDbChats[0]?.id || null,
-          me: { ...currentAgent, activeChatCount: normalizedDbChats.length },
-        });
-      }
-    } catch {}
+      set({
+        chats: normalizedDbChats,
+        selectedChatId: normalizedDbChats[0]?.id || null,
+        me: { ...currentAgent, activeChatCount: normalizedDbChats.length },
+        isHydrating: false,
+      });
+    } catch {
+      set({ isHydrating: false });
+    }
 
     const token = getStoredToken() || undefined;
     const socket = createSocketClient({
@@ -181,6 +175,13 @@ export const useDesk = create<DeskState>((set, get) => ({
       userId: currentAgent.id,
       token,
     });
+
+    socket.off('connect');
+    socket.off('disconnect');
+    socket.off('chat:assigned');
+    socket.off('chat:message');
+    socket.off('chat:closed');
+    socket.off('agent:capacity_changed');
 
     socket.on('connect', () => {
       set({ isConnected: true });
@@ -226,17 +227,30 @@ export const useDesk = create<DeskState>((set, get) => ({
     });
 
     socket.on('chat:message', (payload) => {
-      const { chatId, senderType, text, sentAt } = payload;
+      const { chatId, senderType, text, sentAt, clientTempId, id } = payload;
       set((state) => {
         const isCurrentlyViewing = state.selectedChatId === chatId;
         const updated = state.chats.map((c) => {
           if (c.id !== chatId) return c;
-          const msgExists = c.messages.some((m) => m.text === text && m.sentAt === sentAt);
-          if (msgExists) return c;
+          const existingIndex = c.messages.findIndex(
+            (m: any) =>
+              (id && m.id === id) ||
+              (clientTempId && m.clientTempId === clientTempId) ||
+              (m.text === text && Math.abs(new Date(m.sentAt).getTime() - new Date(sentAt).getTime()) < 4000)
+          );
+          if (existingIndex >= 0) {
+            const updatedMsgs = [...c.messages];
+            updatedMsgs[existingIndex] = {
+              ...updatedMsgs[existingIndex],
+              id: id || updatedMsgs[existingIndex].id,
+              sentAt: sentAt || updatedMsgs[existingIndex].sentAt,
+            };
+            return { ...c, messages: updatedMsgs };
+          }
 
           return {
             ...c,
-            messages: [...c.messages, { senderType, text, sentAt }],
+            messages: [...c.messages, { id, clientTempId, senderType, text, sentAt }],
             unreadCount: isCurrentlyViewing ? 0 : (c.unreadCount || 0) + 1,
             unread: isCurrentlyViewing ? 0 : (c.unread || 0) + 1,
           };
@@ -261,7 +275,163 @@ export const useDesk = create<DeskState>((set, get) => ({
       });
     });
 
+    socket.on('agent:capacity_changed', (payload) => {
+      const { agentId, chatCapacity } = payload;
+      set((state) => ({
+        agents: state.agents.map((a) =>
+          a.id === agentId ? { ...a, chatCapacity } : a
+        ),
+        me: state.me.id === agentId ? { ...state.me, chatCapacity } : state.me,
+      }));
+    });
+
     set({ socketInitialized: true });
+  },
+
+  initManagerSession: async () => {
+    set({ isHydrating: true });
+    try {
+      const [agentsRes, queueRes, meRes] = await Promise.all([
+        api.auth.getAgents().catch(() => ({ agents: [] })),
+        api.chats.getQueue().catch(() => ({ queue: [] })),
+        api.auth.getMe().catch(() => null),
+      ]);
+
+      if (meRes?.user) {
+        const u = meRes.user;
+        const initials = (u.name || u.email || 'Manager')
+          .split(' ')
+          .map((n: string) => n[0])
+          .join('')
+          .toUpperCase()
+          .slice(0, 2);
+
+        set({
+          me: {
+            id: u.id,
+            name: u.name || 'Operations Manager',
+            email: u.email || '',
+            team: 'Operations',
+            initials: initials || 'MN',
+            shiftStatus: 'AVAILABLE',
+            chatCapacity: 0,
+            activeChatCount: 0,
+            avatarUrl: u.avatarUrl || '/avatars/avatar-2.png',
+          },
+        });
+      }
+
+      const rawAgents = (agentsRes as any)?.agents || (agentsRes as any)?.data || [];
+      const agents: AgentInfo[] = rawAgents.map((a: any) => ({
+        id: a.id,
+        name: a.name,
+        email: a.email,
+        shiftStatus: a.shiftStatus || 'AVAILABLE',
+        chatCapacity: a.chatCapacity ?? 3,
+        activeChatCount: a.activeChatCount ?? 0,
+        lastSeenAt: a.lastSeenAt,
+        avatarUrl: a.avatarUrl || '/avatars/avatar-2.png',
+      }));
+
+      const rawQueue = (queueRes as any)?.queue || (queueRes as any)?.data || [];
+      const queue: Chat[] = rawQueue.map((c: any) => ({
+        id: c.id,
+        customerId: c.customerId,
+        customer: c.customerId,
+        customerAvatar: '/avatars/avatar-1.png',
+        status: c.status,
+        queuedAt: c.queuedAt,
+        messages: (c.messages || []).map((m: any) => ({
+          id: m.id,
+          senderType: m.senderType,
+          text: m.text,
+          sentAt: m.sentAt,
+        })),
+        unreadCount: 0,
+        unread: 0,
+      }));
+
+      set({
+        agents,
+        queuedChats: queue,
+        queue,
+        isHydrating: false,
+      });
+    } catch {
+      set({ isHydrating: false });
+    }
+
+    const token = getStoredToken() || undefined;
+    const socket = createSocketClient({
+      role: 'MANAGER',
+      userId: 'manager-session',
+      token,
+    });
+
+    socket.off('agent:status_changed');
+    socket.off('agent:capacity_changed');
+    socket.off('chat:queued');
+    socket.off('chat:assigned');
+    socket.off('chat:closed');
+
+    socket.on('agent:status_changed', (payload) => {
+      set((state) => ({
+        agents: state.agents.map((a) =>
+          a.id === payload.agentId ? { ...a, shiftStatus: payload.shiftStatus } : a
+        ),
+      }));
+    });
+
+    socket.on('agent:capacity_changed', (payload) => {
+      set((state) => ({
+        agents: state.agents.map((a) =>
+          a.id === payload.agentId ? { ...a, chatCapacity: payload.chatCapacity } : a
+        ),
+      }));
+    });
+
+    socket.on('chat:queued', (payload) => {
+      set((state) => {
+        if (state.queuedChats.some((q) => q.id === payload.chatId)) return state;
+        const newQueued: Chat = {
+          id: payload.chatId,
+          customerId: `cust-${payload.chatId.slice(0, 6)}`,
+          customer: `cust-${payload.chatId.slice(0, 6)}`,
+          customerAvatar: '/avatars/avatar-1.png',
+          status: 'WAITING',
+          queuedAt: new Date().toISOString(),
+          messages: [{ senderType: 'CUSTOMER', text: 'Waiting for specialist...', sentAt: new Date().toISOString() }],
+          unreadCount: 0,
+          unread: 0,
+        };
+        const updated = [...state.queuedChats, newQueued];
+        return { queuedChats: updated, queue: updated };
+      });
+    });
+
+    socket.on('chat:assigned', (payload) => {
+      set((state) => {
+        const remainingQueue = state.queuedChats.filter((q) => q.id !== payload.chatId);
+        const updatedAgents = state.agents.map((a) =>
+          a.id === payload.agentId ? { ...a, activeChatCount: a.activeChatCount + 1 } : a
+        );
+        return {
+          queuedChats: remainingQueue,
+          queue: remainingQueue,
+          agents: updatedAgents,
+        };
+      });
+    });
+
+    socket.on('chat:closed', (payload) => {
+      set((state) => {
+        if (!payload.agentId) return state;
+        const updatedAgents = state.agents.map((a) =>
+          a.id === payload.agentId ? { ...a, activeChatCount: Math.max(0, a.activeChatCount - 1) } : a
+        );
+        return { agents: updatedAgents };
+      });
+    });
   },
 
   setMeStatus: (shiftStatus: ShiftStatus) => {
@@ -312,7 +482,9 @@ export const useDesk = create<DeskState>((set, get) => ({
     if (!trimmed) return;
 
     const sentAt = new Date().toISOString();
+    const clientTempId = 'msg-' + Math.random().toString(36).slice(2, 9);
     const newMessage: Message = {
+      clientTempId,
       senderType: 'AGENT',
       text: trimmed,
       sentAt,
@@ -321,6 +493,8 @@ export const useDesk = create<DeskState>((set, get) => ({
     const socket = getActiveSocket();
     if (socket?.connected) {
       socket.emit('chat:message', {
+        id: clientTempId,
+        clientTempId,
         chatId,
         senderType: 'AGENT',
         text: trimmed,
@@ -371,7 +545,21 @@ export const useDesk = create<DeskState>((set, get) => ({
   },
 
   updateAgentCapacity: (agentId: string, capacity: number) => {
-    const clamped = Math.max(1, Math.min(4, capacity));
+    const clamped = Math.max(1, Math.min(10, capacity));
+    const socket = getActiveSocket();
+    if (socket?.connected) {
+      socket.emit('agent:capacity_changed', { agentId, chatCapacity: clamped });
+    }
+    const token = getStoredToken();
+    fetch(`/api/auth/agents/${agentId}/capacity`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ chatCapacity: clamped }),
+    }).catch(() => {});
+
     set((state) => ({
       agents: state.agents.map((a) =>
         a.id === agentId ? { ...a, chatCapacity: clamped } : a
@@ -434,7 +622,10 @@ export const useMe = () => useDesk((s) => s.me);
 export const useMyActiveChats = () => {
   const meId = useDesk((s) => s.me.id);
   const chats = useDesk((s) => s.chats);
-  return React.useMemo(() => chats.filter((c) => c.assignedAgentId === meId), [chats, meId]);
+  return React.useMemo(() => {
+    if (!meId) return chats;
+    return chats.filter((c) => c.assignedAgentId === meId || !c.assignedAgentId);
+  }, [chats, meId]);
 };
 
 export const useSelectedChat = () => {

@@ -19,6 +19,8 @@ import { api, getStoredToken } from '@/lib/api';
 import { createSocketClient, TypedSocket } from '@/lib/socket';
 
 interface ChatMessage {
+  id?: string;
+  clientTempId?: string;
   senderType: 'CUSTOMER' | 'AGENT';
   text: string;
   sentAt: string;
@@ -62,30 +64,135 @@ export default function CustomerPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const bindSocketEvents = (client: TypedSocket) => {
+    client.off('chat:queued');
+    client.off('chat:assigned');
+    client.off('chat:message');
+    client.off('chat:closed');
+    client.off('chat:sync');
+    client.off('chat:rejoin_failed');
+
+    client.on('chat:queued', (payload) => {
+      setChatId(payload.chatId);
+      setSessionState('QUEUED');
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('swish_customer_chat_id', payload.chatId);
+      }
+    });
+
+    client.on('chat:assigned', (payload) => {
+      setChatId(payload.chatId);
+      setSessionState('ACTIVE');
+      setAssignedAgentId(payload.agentId);
+      setAssignedAgentName((payload as any).agentName || 'Agent Support');
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('swish_customer_chat_id', payload.chatId);
+      }
+    });
+
+    client.on('chat:sync', (payload) => {
+      setChatId(payload.chatId);
+      setSessionState(payload.status === 'CLOSED' ? 'CLOSED' : payload.status === 'WAITING' ? 'QUEUED' : 'ACTIVE');
+      if (payload.agentId) setAssignedAgentId(payload.agentId);
+      if (payload.agentName) setAssignedAgentName(payload.agentName);
+      if (payload.messages && Array.isArray(payload.messages)) {
+        setMessages(payload.messages as any);
+      }
+      if (payload.status === 'CLOSED' && typeof window !== 'undefined') {
+        localStorage.removeItem('swish_customer_chat_id');
+      }
+    });
+
+    client.on('chat:rejoin_failed', () => {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('swish_customer_chat_id');
+      }
+      setSessionState('IDLE');
+      setChatId(null);
+    });
+
+    client.on('chat:message', (payload) => {
+      setMessages((prev) => {
+        const existingIndex = prev.findIndex(
+          (m: any) =>
+            (payload.id && m.id === payload.id) ||
+            (payload.clientTempId && m.clientTempId === payload.clientTempId) ||
+            (m.text === payload.text && Math.abs(new Date(m.sentAt).getTime() - new Date(payload.sentAt).getTime()) < 4000)
+        );
+        if (existingIndex >= 0) {
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            id: payload.id || updated[existingIndex].id,
+            sentAt: payload.sentAt || updated[existingIndex].sentAt,
+          };
+          return updated;
+        }
+        return [
+          ...prev,
+          {
+            id: payload.id,
+            clientTempId: payload.clientTempId,
+            senderType: payload.senderType as any,
+            text: payload.text,
+            sentAt: payload.sentAt,
+          },
+        ];
+      });
+    });
+
+    client.on('chat:closed', () => {
+      setSessionState('CLOSED');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('swish_customer_chat_id');
+      }
+    });
+  };
+
   useEffect(() => {
-    api.auth
-      .getMe()
-      .then((res) => {
+    const initCustomer = async () => {
+      let resolvedCustId = 'cust-guest';
+      try {
+        const res = await api.auth.getMe();
         if (res?.user) {
+          resolvedCustId = res.user.id;
           setCustomerId(res.user.id);
           setCustomerName(res.user.name || res.user.email || 'Customer');
           if (res.user.avatarUrl) {
             setCustomerAvatar(res.user.avatarUrl);
           }
         }
-      })
-      .catch(() => {
+      } catch {
         const stored = typeof window !== 'undefined' ? localStorage.getItem('swish_customer_id') : null;
         if (stored) {
+          resolvedCustId = stored;
           setCustomerId(stored);
         } else {
-          const generated = `cust-${Math.random().toString(36).slice(2, 8)}`;
-          setCustomerId(generated);
+          resolvedCustId = `cust-${Math.random().toString(36).slice(2, 8)}`;
+          setCustomerId(resolvedCustId);
           if (typeof window !== 'undefined') {
-            localStorage.setItem('swish_customer_id', generated);
+            localStorage.setItem('swish_customer_id', resolvedCustId);
           }
         }
-      });
+      }
+
+      const activeChatId = typeof window !== 'undefined' ? localStorage.getItem('swish_customer_chat_id') : null;
+      if (activeChatId) {
+        const token = getStoredToken() || undefined;
+        const client = createSocketClient({
+          role: 'CUSTOMER',
+          userId: resolvedCustId,
+          token,
+        });
+        setSocket(client);
+        bindSocketEvents(client);
+        setChatId(activeChatId);
+        setSessionState('ACTIVE');
+        client.emit('chat:rejoin', { chatId: activeChatId });
+      }
+    };
+
+    initCustomer();
   }, []);
 
   const handleStartChat = (e: React.FormEvent) => {
@@ -101,71 +208,54 @@ export default function CustomerPage() {
 
     setSocket(client);
     setSessionState('QUEUED');
-
-    client.on('chat:queued', (payload) => {
-      setChatId(payload.chatId);
-      setSessionState('QUEUED');
-    });
-
-    client.on('chat:assigned', (payload) => {
-      setChatId(payload.chatId);
-      setSessionState('ACTIVE');
-      setAssignedAgentId(payload.agentId);
-      setAssignedAgentName((payload as any).agentName || 'Agent Support');
-    });
-
-    client.on('chat:message', (payload) => {
-      setMessages((prev) => {
-        const exists = prev.some((m) => m.text === payload.text && m.sentAt === payload.sentAt);
-        if (exists) return prev;
-        return [
-          ...prev,
-          {
-            senderType: payload.senderType,
-            text: payload.text,
-            sentAt: payload.sentAt,
-          },
-        ];
-      });
-    });
-
-    client.on('chat:closed', () => {
-      setSessionState('CLOSED');
-    });
+    bindSocketEvents(client);
 
     client.emit('chat:new', { customerId });
 
     if (initialText) {
-      setTimeout(() => {
-        setMessages([
-          {
-            senderType: 'CUSTOMER',
-            text: initialText,
-            sentAt: new Date().toISOString(),
-          },
-        ]);
-      }, 300);
+      const sentAt = new Date().toISOString();
+      const clientTempId = 'cust-msg-' + Math.random().toString(36).slice(2, 9);
+      setMessages([
+        {
+          id: clientTempId,
+          clientTempId,
+          senderType: 'CUSTOMER',
+          text: initialText,
+          sentAt,
+        },
+      ]);
+      client.once('chat:assigned', (payload) => {
+        client.emit('chat:message', {
+          id: clientTempId,
+          clientTempId,
+          chatId: payload.chatId,
+          senderType: 'CUSTOMER',
+          text: initialText,
+          sentAt,
+        });
+      });
+      client.once('chat:queued', (payload) => {
+        client.emit('chat:message', {
+          id: clientTempId,
+          clientTempId,
+          chatId: payload.chatId,
+          senderType: 'CUSTOMER',
+          text: initialText,
+          sentAt,
+        });
+      });
     }
   };
-
-  useEffect(() => {
-    if (chatId && sessionState === 'ACTIVE' && prompt.trim() && socket?.connected) {
-      socket.emit('chat:message', {
-        chatId,
-        senderType: 'CUSTOMER',
-        text: prompt.trim(),
-        sentAt: new Date().toISOString(),
-      });
-      setPrompt('');
-    }
-  }, [chatId, sessionState, socket]);
 
   const handleSendMessage = () => {
     const trimmed = inputText.trim();
     if (!trimmed || !chatId || !socket?.connected) return;
 
     const sentAt = new Date().toISOString();
+    const clientTempId = 'cust-msg-' + Math.random().toString(36).slice(2, 9);
     socket.emit('chat:message', {
+      id: clientTempId,
+      clientTempId,
       chatId,
       senderType: 'CUSTOMER',
       text: trimmed,
@@ -175,6 +265,8 @@ export default function CustomerPage() {
     setMessages((prev) => [
       ...prev,
       {
+        id: clientTempId,
+        clientTempId,
         senderType: 'CUSTOMER',
         text: trimmed,
         sentAt,
@@ -192,8 +284,14 @@ export default function CustomerPage() {
   };
 
   const handleResetChat = () => {
+    if (chatId && socket?.connected) {
+      socket.emit('chat:closed', { chatId });
+    }
     if (socket) {
       socket.disconnect();
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('swish_customer_chat_id');
     }
     setChatId(null);
     setSessionState('IDLE');
@@ -202,7 +300,9 @@ export default function CustomerPage() {
     setInputText('');
     setAssignedAgentName(null);
     setAssignedAgentId(null);
+    setSocket(null);
   };
+
 
   return (
     <div className="min-h-dvh w-full max-w-full flex flex-col bg-[#F8FAFC] text-[#0F172A] overflow-x-hidden">

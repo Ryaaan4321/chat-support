@@ -1,6 +1,6 @@
-import { onNewChat,onAgentFreedUp } from '../../src/services/assignment.service';
-import { claimAgentForChat,claimChatForAgent } from '../../src/repositories/agent.repositories';
-import { describe, it, expect,afterEach,jest } from '@jest/globals';
+import { onNewChat, onAgentFreedUp } from '../../src/services/assignment.service';
+import { claimAgentForChat, claimChatForAgent } from '../../src/repositories/agent.repositories';
+import { describe, it, expect, afterEach, jest } from '@jest/globals';
 jest.mock('../../src/repositories/agent.repositories', () => ({
   claimAgentForChat: jest.fn(),
   claimChatForAgent: jest.fn(),
@@ -35,7 +35,20 @@ describe('assignment.service', () => {
       const result = await onNewChat('chat-3');
       expect(result).toEqual(assignedChat);
     });
+
+    it('assigns 3rd chat when agent capacity is 3 and active count is 2', async () => {
+      const assignedChat = {
+        id: 'chat-triple',
+        assignedAgentId: 'agent-capacity-3',
+        status: 'ACTIVE',
+      };
+      mockClaimAgentForChat.mockResolvedValue(assignedChat as any);
+      const result = await onNewChat('chat-triple');
+      expect(result).toEqual(assignedChat);
+      expect(mockClaimAgentForChat).toHaveBeenCalledWith('chat-triple');
+    });
     it('only assigns one of two simultaneous chats when there is one free slot', async () => {
+
       mockClaimAgentForChat
         .mockResolvedValue(null)
         .mockResolvedValueOnce({ id: 'chat-a', assignedAgentId: 'agent-1' } as any);
