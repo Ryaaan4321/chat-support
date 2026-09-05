@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { makeFakeSocket, makeFakeIo } from '../socket-test-harness';
-import { registerAgentHandlers } from '../../src/sockets/agent.socket';
+import { registerAgentHandlers, registerManagerHandlers } from '../../src/sockets/agent.socket';
 import { onAgentFreedUp } from '../../src/services/assignment.service';
 import { prisma } from '../../lib/prisma';
 jest.mock('../../src/services/assignment.service', () => ({
@@ -74,10 +74,12 @@ describe('agent:status_changed', () => {
   });
 
   it('pulls the next queued chat and joins the agent into its room when going AVAILABLE', async () => {
-    mockOnAgentFreedUp.mockResolvedValue({
-      id: 'chat-7',
-      assignedAt: new Date('2026-01-01T00:00:00Z'),
-    } as any);
+    mockOnAgentFreedUp
+      .mockResolvedValueOnce({
+        id: 'chat-7',
+        assignedAt: new Date('2026-01-01T00:00:00Z'),
+      } as any)
+      .mockResolvedValue(null);
 
     const { io, toEmitters, inRooms } = makeFakeIo();
     const { socket, handlers } = makeFakeSocket({ role: 'AGENT', userId: 'agent-1' });
@@ -108,7 +110,7 @@ describe('agent:status_changed', () => {
   });
 });
 
-describe('heartbeat lifecycle', () => {
+describe('heartbeat and disconnect lifecycle', () => {
   it('stops updating lastSeenAt after disconnect fires', async () => {
     const { io } = makeFakeIo();
     const { socket, handlers } = makeFakeSocket({ role: 'AGENT', userId: 'agent-1' });
@@ -119,9 +121,69 @@ describe('heartbeat lifecycle', () => {
     jest.advanceTimersByTime(15_000);
     expect(mockAgentUpdate).toHaveBeenCalledTimes(1);
 
-    handlers['disconnect']();
+    await handlers['disconnect']();
     mockAgentUpdate.mockClear();
     jest.advanceTimersByTime(30_000);
     expect(mockAgentUpdate).not.toHaveBeenCalled();
+  });
+
+  it('sets shiftStatus to OFFLINE in DB and emits agent:status_changed to managers on disconnect', async () => {
+    const { io, toEmitters } = makeFakeIo();
+    const { socket, handlers } = makeFakeSocket({ role: 'AGENT', userId: 'agent-1' });
+    registerAgentHandlers(io as any, socket as any);
+    await flush();
+
+    mockAgentUpdate.mockClear();
+    await handlers['disconnect']();
+    await flush();
+
+    expect(mockAgentUpdate).toHaveBeenCalledWith({
+      where: { id: 'agent-1' },
+      data: { shiftStatus: 'OFFLINE' },
+    });
+    expect(toEmitters['managers'].emit).toHaveBeenCalledWith('agent:status_changed', {
+      agentId: 'agent-1',
+      shiftStatus: 'OFFLINE',
+    });
+  });
+});
+
+describe('manager capacity changes', () => {
+  it('allows manager to change capacity and drains waiting queue when available', async () => {
+    mockAgentUpdate.mockResolvedValue({
+      id: 'agent-1',
+      chatCapacity: 4,
+      shiftStatus: 'AVAILABLE',
+      activeChatCount: 2,
+    } as any);
+    mockOnAgentFreedUp
+      .mockResolvedValueOnce({
+        id: 'chat-waiting-1',
+        assignedAt: new Date('2026-01-01T00:00:00Z'),
+      } as any)
+      .mockResolvedValueOnce(null);
+
+    const { io, toEmitters, inRooms } = makeFakeIo();
+    const { socket, handlers } = makeFakeSocket({ role: 'MANAGER', userId: 'manager-1' });
+    registerManagerHandlers(io as any, socket as any);
+    await flush();
+
+    await handlers['agent:capacity_changed']({ agentId: 'agent-1', chatCapacity: 4 });
+    await flush();
+
+    expect(toEmitters['managers'].emit).toHaveBeenCalledWith('agent:capacity_changed', {
+      agentId: 'agent-1',
+      chatCapacity: 4,
+    });
+    expect(toEmitters['agent:agent-1'].emit).toHaveBeenCalledWith('agent:capacity_changed', {
+      agentId: 'agent-1',
+      chatCapacity: 4,
+    });
+    expect(mockOnAgentFreedUp).toHaveBeenCalledWith('agent-1');
+    expect(inRooms['agent:agent-1'].socketsJoin).toHaveBeenCalledWith('chat:chat-waiting-1');
+    expect(toEmitters['chat:chat-waiting-1'].emit).toHaveBeenCalledWith(
+      'chat:assigned',
+      expect.objectContaining({ chatId: 'chat-waiting-1', agentId: 'agent-1' })
+    );
   });
 });

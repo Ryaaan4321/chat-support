@@ -43,16 +43,36 @@ export default function LoginPage() {
 
     try {
       if (role === 'AGENT') {
-        const cleanEmail = email.trim() || 'sarah.agent@swish.internal';
+        const cleanEmail = email.trim();
+        if (!cleanEmail) {
+          setErrorMsg('Please enter your agent email address.');
+          setLoading(false);
+          return;
+        }
         await api.auth.loginAgent({ email: cleanEmail });
         handleRedirect('AGENT');
       } else if (role === 'MANAGER') {
-        const cleanEmail = email.trim() || 'alex.lead@swish.internal';
-        const key = managerKey.trim() || 'swish-manager-super-secret-2026';
+        const cleanEmail = email.trim();
+        const key = managerKey.trim();
+        if (!cleanEmail) {
+          setErrorMsg('Please enter your manager email address.');
+          setLoading(false);
+          return;
+        }
+        if (!key) {
+          setErrorMsg('Please enter your manager passkey.');
+          setLoading(false);
+          return;
+        }
         await api.auth.loginManager({ email: cleanEmail, password: key });
         handleRedirect('MANAGER');
       } else {
-        const cleanEmail = email.trim() || 'customer-101';
+        const cleanEmail = email.trim();
+        if (!cleanEmail) {
+          setErrorMsg('Please enter your customer ID or name.');
+          setLoading(false);
+          return;
+        }
         await api.auth.createCustomerSession({ customerId: cleanEmail });
         handleRedirect('CUSTOMER');
       }
@@ -62,7 +82,7 @@ export default function LoginPage() {
       } else if (err instanceof Error) {
         setErrorMsg(err.message);
       } else {
-        setErrorMsg('Sign in failed. Please try again.');
+        setErrorMsg('Sign in failed. Please check your credentials.');
       }
     } finally {
       setLoading(false);
@@ -102,35 +122,6 @@ export default function LoginPage() {
         setErrorMsg(err.message);
       } else {
         setErrorMsg('Registration failed. Please check your details.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoLogin = async (demoRole: 'AGENT' | 'MANAGER' | 'CUSTOMER') => {
-    setLoading(true);
-    setErrorMsg(null);
-
-    try {
-      if (demoRole === 'AGENT') {
-        await api.auth.loginAgent({ email: 'sarah.agent@swish.internal' });
-        handleRedirect('AGENT');
-      } else if (demoRole === 'MANAGER') {
-        await api.auth.loginManager({
-          email: 'alex.lead@swish.internal',
-          password: 'swish-manager-super-secret-2026',
-        });
-        handleRedirect('MANAGER');
-      } else {
-        await api.auth.createCustomerSession({ customerId: 'cust-demo-1' });
-        handleRedirect('CUSTOMER');
-      }
-    } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        setErrorMsg(err.message);
-      } else {
-        setErrorMsg('Demo sign in failed.');
       }
     } finally {
       setLoading(false);
@@ -250,10 +241,10 @@ export default function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder={
                       role === 'AGENT'
-                        ? 'sarah.agent@swish.internal'
+                        ? 'agent@company.com'
                         : role === 'MANAGER'
-                        ? 'alex.lead@swish.internal'
-                        : 'cust-101'
+                        ? 'manager@company.com'
+                        : 'Enter your customer name or ID'
                     }
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-slate-900"
                   />
@@ -396,37 +387,7 @@ export default function LoginPage() {
               </form>
             )}
 
-            <div className="mt-6 pt-5 border-t border-slate-100">
-              <span className="block text-[11px] font-medium uppercase tracking-wider text-slate-600 text-center mb-3">
-                Quick Demo Accounts
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => handleDemoLogin('AGENT')}
-                  className="py-1.5 px-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 rounded-lg transition-colors text-center truncate"
-                >
-                  Agent Sarah
-                </button>
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => handleDemoLogin('MANAGER')}
-                  className="py-1.5 px-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 rounded-lg transition-colors text-center truncate"
-                >
-                  Manager Alex
-                </button>
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => handleDemoLogin('CUSTOMER')}
-                  className="py-1.5 px-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 rounded-lg transition-colors text-center truncate"
-                >
-                  Customer Demo
-                </button>
-              </div>
-            </div>
+
           </div>
         </div>
       </div>

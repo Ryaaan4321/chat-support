@@ -84,5 +84,12 @@ describe('assignment.service', () => {
       const result = await onAgentFreedUp('agent-3');
       expect(result).toBeNull();
     });
+
+    it('blocks new assignments when capacity is decreased below active chat count', async () => {
+      mockClaimChatForAgent.mockResolvedValue(null);
+      const result = await onAgentFreedUp('agent-over-capacity');
+      expect(result).toBeNull();
+      expect(mockClaimChatForAgent).toHaveBeenCalledWith('agent-over-capacity');
+    });
   });
 });

@@ -6,10 +6,12 @@ import {
   getProfile,
   parseAndVerifyToken,
 } from '../../src/services/auth.service';
+import { logoutHandler } from '../../src/controllers/auth.controller';
 import { findAgentByEmail, findAgentById } from '../../src/repositories/auth.repository';
 import { signToken, verifyToken } from '../../lib/jwt';
 import { AppError } from '../../lib/errors';
 import { authenticateHttp, requireRole, authenticateSocket } from '../../src/middlewares/auth.middleware';
+import { prisma } from '../../lib/prisma';
 
 jest.mock('../../src/repositories/auth.repository', () => ({
   findAgentByEmail: jest.fn(),
@@ -17,11 +19,19 @@ jest.mock('../../src/repositories/auth.repository', () => ({
   listAgents: jest.fn(),
 }));
 
+jest.mock('../../lib/prisma', () => ({
+  prisma: {
+    agent: { update: jest.fn() },
+  },
+}));
+
 const mockFindAgentByEmail = findAgentByEmail as jest.MockedFunction<typeof findAgentByEmail>;
 const mockFindAgentById = findAgentById as jest.MockedFunction<typeof findAgentById>;
+const mockAgentUpdate = prisma.agent.update as jest.MockedFunction<typeof prisma.agent.update>;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockAgentUpdate.mockResolvedValue({} as any);
 });
 
 describe('JWT Utility', () => {
@@ -189,5 +199,36 @@ describe('Auth Middlewares', () => {
     expect(next).toHaveBeenCalledWith();
     expect(socket.data.userId).toBe('agent-socket-1');
     expect(socket.data.role).toBe('AGENT');
+  });
+});
+
+describe('logoutHandler', () => {
+  it('updates agent shiftStatus to OFFLINE and emits to managers', async () => {
+    const mockEmit = jest.fn();
+    const req = {
+      user: { userId: 'agent-123', role: 'AGENT' },
+      app: {
+        get: jest.fn().mockReturnValue({
+          to: jest.fn().mockReturnValue({ emit: mockEmit }),
+        }),
+      },
+    } as any;
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as any;
+    const next = jest.fn();
+
+    await logoutHandler(req, res, next);
+
+    expect(mockAgentUpdate).toHaveBeenCalledWith({
+      where: { id: 'agent-123' },
+      data: { shiftStatus: 'OFFLINE' },
+    });
+    expect(mockEmit).toHaveBeenCalledWith('agent:status_changed', {
+      agentId: 'agent-123',
+      shiftStatus: 'OFFLINE',
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
   });
 });

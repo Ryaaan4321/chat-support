@@ -5,12 +5,12 @@ async function run() {
   const customerId = 'cust-test-' + Date.now();
 
   const agentSocket = io('http://localhost:4001', {
-    auth: { token: 'demo-token', role: 'AGENT', userId: agentId },
+    auth: { token: 'test-token', role: 'AGENT', userId: agentId },
     transports: ['websocket', 'polling'],
   });
 
   const customerSocket = io('http://localhost:4001', {
-    auth: { token: 'demo-token', role: 'CUSTOMER', userId: customerId },
+    auth: { token: 'test-token', role: 'CUSTOMER', userId: customerId },
     transports: ['websocket', 'polling'],
   });
 

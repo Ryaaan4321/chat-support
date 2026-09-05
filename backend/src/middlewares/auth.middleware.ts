@@ -59,7 +59,7 @@ export function authenticateSocket(
       return next(AppError.unauthorized('Authentication token is required in socket handshake auth'));
     }
 
-    if ((rawToken === 'test-token' || rawToken === 'demo-token') && auth?.role && auth?.userId) {
+    if (rawToken === 'test-token' && auth?.role && auth?.userId) {
       socket.data.role = auth.role;
       socket.data.userId = auth.userId;
       return next();

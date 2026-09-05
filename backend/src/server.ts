@@ -4,7 +4,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData } from '../types/socket.event.types';
 import { registerChatHandlers, sweepWaitingChats } from './sockets/chat.socket';
-import { registerAgentHandlers, sweepStaleAgents } from './sockets/agent.socket';
+import { registerAgentHandlers, registerManagerHandlers, sweepStaleAgents } from './sockets/agent.socket';
 import { authenticateSocket } from './middlewares/auth.middleware';
 import { errorHandler } from './middlewares/error.middleware';
 import authRoutes from './routes/auth.routes';
@@ -52,6 +52,8 @@ export function createRealtimeServer() {
     },
   });
 
+  app.set('io', io);
+
   io.use(authenticateSocket);
 
   io.on('connection', (socket) => {
@@ -60,6 +62,7 @@ export function createRealtimeServer() {
     socket.join(`${role.toLowerCase()}:${userId}`);
     if (role === 'MANAGER') {
       socket.join('managers');
+      registerManagerHandlers(io, socket);
     }
 
     if (role === 'AGENT') {

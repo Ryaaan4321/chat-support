@@ -7,6 +7,7 @@ import { MessageSquare, LogOut } from 'lucide-react';
 import { useMe, useMyActiveChats } from '@/lib/desk-store';
 import { StatusPills } from './status-pills';
 import { api } from '@/lib/api';
+import { getActiveSocket, disconnectActiveSocket } from '@/lib/socket';
 
 export function AppHeader() {
   const router = useRouter();
@@ -18,8 +19,13 @@ export function AppHeader() {
 
   const avatarUrl = (me as any)?.avatarUrl || '/avatars/avatar-2.png';
 
-  const handleLogout = () => {
-    api.auth.logout();
+  const handleLogout = async () => {
+    const socket = getActiveSocket();
+    if (socket && !isManager && !isCustomer && me?.id) {
+      socket.emit('agent:status_changed', { agentId: me.id, shiftStatus: 'OFFLINE' });
+    }
+    await api.auth.logout();
+    disconnectActiveSocket();
     router.push('/login');
   };
 

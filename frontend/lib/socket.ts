@@ -20,7 +20,7 @@ export function createSocketClient(auth: SocketData & { token?: string }): Typed
 
   activeSocket = io(SOCKET_URL, {
     auth: {
-      token: auth.token ?? 'demo-token',
+      token: auth.token || '',
       role: auth.role,
       userId: auth.userId,
     },

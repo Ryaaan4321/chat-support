@@ -16,6 +16,22 @@ type IoSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEv
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const STALE_AFTER_MS = 45_000;
 
+export async function drainWaitingChatsForAgent(io: IoServer, agentId: string) {
+  for (let i = 0; i < 10; i++) {
+    const next = await onAgentFreedUp(agentId);
+    if (!next) break;
+    const payload = {
+      chatId: next.id,
+      agentId,
+      assignedAt: ((next.assignedAt as Date) || new Date()).toISOString(),
+    };
+    await io.in(`agent:${agentId}`).socketsJoin(`chat:${next.id}`);
+    io.to(`agent:${agentId}`).emit('chat:assigned', payload);
+    io.to(`chat:${next.id}`).emit('chat:assigned', payload);
+    io.to('managers').emit('chat:assigned', payload);
+  }
+}
+
 export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
   const agentId = socket.data.userId;
 
@@ -52,7 +68,26 @@ export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
     }
   }, HEARTBEAT_INTERVAL_MS);
 
-  socket.on('disconnect', () => clearInterval(heartbeat));
+  socket.on('disconnect', async () => {
+    clearInterval(heartbeat);
+    try {
+      if (agentId) {
+        const remaining = io.sockets?.adapter?.rooms?.get(`agent:${agentId}`);
+        if (!remaining || remaining.size === 0) {
+          await prisma.agent.update({
+            where: { id: agentId },
+            data: { shiftStatus: 'OFFLINE' },
+          });
+          io.to('managers').emit('agent:status_changed', {
+            agentId,
+            shiftStatus: 'OFFLINE',
+          });
+        }
+      }
+    } catch (err) {
+      logger.error({ err: AppError.from(err), agentId }, '[agent disconnect] status update failed');
+    }
+  });
 
   socket.on('agent:capacity_changed', async ({ agentId: targetId, chatCapacity }) => {
     try {
@@ -70,17 +105,7 @@ export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
         chatCapacity: updated.chatCapacity,
       });
       if (updated.shiftStatus === 'AVAILABLE' && updated.activeChatCount < updated.chatCapacity) {
-        const next = await onAgentFreedUp(targetAgentId);
-        if (next) {
-          const payload = {
-            chatId: next.id,
-            agentId: targetAgentId,
-            assignedAt: ((next.assignedAt as Date) || new Date()).toISOString(),
-          };
-          await io.in(`agent:${targetAgentId}`).socketsJoin(`chat:${next.id}`);
-          io.to(`agent:${targetAgentId}`).emit('chat:assigned', payload);
-          io.to(`chat:${next.id}`).emit('chat:assigned', payload);
-        }
+        await drainWaitingChatsForAgent(io, targetAgentId);
       }
     } catch (err) {
       logger.error({ err: AppError.from(err), agentId }, '[agent:capacity_changed] handler error');
@@ -98,20 +123,34 @@ export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
       });
       io.to('managers').emit('agent:status_changed', { agentId, shiftStatus });
       if (shiftStatus === 'AVAILABLE') {
-        const next = await onAgentFreedUp(agentId);
-        if (next) {
-          const payload = {
-            chatId: next.id,
-            agentId,
-            assignedAt: (next.assignedAt as Date).toISOString(),
-          };
-          await io.in(`agent:${agentId}`).socketsJoin(`chat:${next.id}`);
-          io.to(`agent:${agentId}`).emit('chat:assigned', payload);
-          io.to(`chat:${next.id}`).emit('chat:assigned', payload);
-        }
+        await drainWaitingChatsForAgent(io, agentId);
       }
     } catch (err) {
       logger.error({ err: AppError.from(err), agentId }, '[agent:status_changed] handler error');
+    }
+  });
+}
+
+export function registerManagerHandlers(io: IoServer, socket: IoSocket) {
+  socket.on('agent:capacity_changed', async ({ agentId: targetId, chatCapacity }) => {
+    try {
+      if (!targetId || !chatCapacity) {
+        throw AppError.validation('agentId and chatCapacity are required');
+      }
+      const updated = await updateAgentCapacity(targetId, chatCapacity);
+      io.to('managers').emit('agent:capacity_changed', {
+        agentId: targetId,
+        chatCapacity: updated.chatCapacity,
+      });
+      io.to(`agent:${targetId}`).emit('agent:capacity_changed', {
+        agentId: targetId,
+        chatCapacity: updated.chatCapacity,
+      });
+      if (updated.shiftStatus === 'AVAILABLE' && updated.activeChatCount < updated.chatCapacity) {
+        await drainWaitingChatsForAgent(io, targetId);
+      }
+    } catch (err) {
+      logger.error({ err: AppError.from(err) }, '[manager agent:capacity_changed] handler error');
     }
   });
 }

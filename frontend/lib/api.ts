@@ -169,7 +169,10 @@ export const api = {
       return request<UserProfileResponse>('/api/auth/me', { method: 'GET' });
     },
 
-    logout: (): void => {
+    logout: async (): Promise<void> => {
+      try {
+        await request<{ success: boolean }>('/api/auth/logout', { method: 'POST' });
+      } catch {}
       clearStoredAuth();
     },
   },
