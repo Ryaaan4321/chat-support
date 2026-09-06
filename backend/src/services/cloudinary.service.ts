@@ -12,9 +12,9 @@ export function generateUploadSignature(options?: {
   folder?: string;
   timestamp?: number;
 }): CloudinarySignatureResult {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME || "";
-  const apiKey = process.env.CLOUDINARY_API_KEY || "";
-  const apiSecret = process.env.CLOUDINARY_API_SECRET || "";
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'demo';
+  const apiKey = process.env.CLOUDINARY_API_KEY || 'demo-key';
+  const apiSecret = process.env.CLOUDINARY_API_SECRET || 'demo-secret';
 
   const folder = options?.folder || 'chat_attachments';
   const timestamp = options?.timestamp || Math.floor(Date.now() / 1000);

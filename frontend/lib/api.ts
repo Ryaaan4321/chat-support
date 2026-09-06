@@ -189,5 +189,35 @@ export const api = {
     getQueue: async (): Promise<{ queue: any[] }> => {
       return request<{ queue: any[] }>('/api/chats/queue', { method: 'GET' });
     },
+
+    getAgentPerformanceChats: async (agentId: string): Promise<{ success: boolean; chats: any[] }> => {
+      return request<{ success: boolean; chats: any[] }>(`/api/chats/agent/${agentId}/performance-chats`, { method: 'GET' });
+    },
+
+    getUploadSignature: async (folder: string = 'chat_attachments'): Promise<{
+      signature: string;
+      timestamp: number;
+      apiKey: string;
+      cloudName: string;
+      folder: string;
+    }> => {
+      return request<any>('/api/chats/upload-signature', {
+        method: 'POST',
+        body: JSON.stringify({ folder }),
+      });
+    },
+
+    getCannedResponses: async (): Promise<{
+      success: boolean;
+      cannedResponses: Array<{
+        id?: string;
+        shortcut: string;
+        title: string;
+        text: string;
+        category?: string;
+      }>;
+    }> => {
+      return request<any>('/api/chats/canned-responses', { method: 'GET' });
+    },
   },
 };

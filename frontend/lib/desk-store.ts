@@ -1,6 +1,13 @@
 import React from 'react';
 import { create } from 'zustand';
-import { AgentInfo, ChatItem, ShiftStatus } from '../types/socket.event.types';
+import {
+  AgentInfo,
+  ChatItem,
+  ShiftStatus,
+  ChatSlaBreachPayload,
+  AgentPerformanceUpdatedPayload,
+  AgentShiftUpdatedPayload,
+} from '../types/socket.event.types';
 import { createSocketClient, getActiveSocket } from './socket';
 import { api, getStoredToken } from './api';
 
@@ -28,7 +35,9 @@ export interface Message {
   id?: string;
   clientTempId?: string;
   senderType: 'AGENT' | 'CUSTOMER' | string;
+  messageType?: 'TEXT' | 'IMAGE';
   text: string;
+  imageUrl?: string;
   sentAt: string;
   [key: string]: any;
 }
@@ -54,6 +63,7 @@ export interface DeskState {
   chats: Chat[];
   queuedChats: Chat[];
   queue: Chat[];
+  slaBreaches: ChatSlaBreachPayload[];
   selectedChatId: string | null;
   mobileShowThread: boolean;
   filterStatus: string;
@@ -70,11 +80,12 @@ export interface DeskState {
   setFilterStatus: (filter: string) => void;
   setIsConnected: (connected: boolean) => void;
 
-  sendMessage: (chatId: string, text: string) => void;
+  sendMessage: (chatId: string, text: string, imageUrl?: string) => void;
   closeChat: (chatId: string) => void;
   updateAgentCapacity: (agentId: string, capacity: number) => void;
   syncChatAssigned: (chatId: string, agentId: string, customerId?: string) => void;
   syncChatQueued: (chat: Chat | ChatItem) => void;
+  dismissSlaBreach: (chatId: string) => void;
 
   [key: string]: any;
 }
@@ -95,6 +106,7 @@ export const useDesk = create<DeskState>((set, get) => ({
   chats: [],
   queuedChats: [],
   queue: [],
+  slaBreaches: [],
   selectedChatId: null,
   mobileShowThread: false,
   filterStatus: 'ALL',
@@ -227,7 +239,7 @@ export const useDesk = create<DeskState>((set, get) => ({
     });
 
     socket.on('chat:message', (payload) => {
-      const { chatId, senderType, text, sentAt, clientTempId, id } = payload;
+      const { chatId, senderType, text, sentAt, clientTempId, id, imageUrl, messageType } = payload;
       set((state) => {
         const isCurrentlyViewing = state.selectedChatId === chatId;
         const updated = state.chats.map((c) => {
@@ -244,13 +256,26 @@ export const useDesk = create<DeskState>((set, get) => ({
               ...updatedMsgs[existingIndex],
               id: id || updatedMsgs[existingIndex].id,
               sentAt: sentAt || updatedMsgs[existingIndex].sentAt,
+              imageUrl: imageUrl || updatedMsgs[existingIndex].imageUrl,
+              messageType: messageType || updatedMsgs[existingIndex].messageType,
             };
             return { ...c, messages: updatedMsgs };
           }
 
           return {
             ...c,
-            messages: [...c.messages, { id, clientTempId, senderType, text, sentAt }],
+            messages: [
+              ...c.messages,
+              {
+                id,
+                clientTempId,
+                senderType,
+                messageType: messageType || (imageUrl ? 'IMAGE' : 'TEXT'),
+                text,
+                imageUrl,
+                sentAt,
+              },
+            ],
             unreadCount: isCurrentlyViewing ? 0 : (c.unreadCount || 0) + 1,
             unread: isCurrentlyViewing ? 0 : (c.unread || 0) + 1,
           };
@@ -331,6 +356,12 @@ export const useDesk = create<DeskState>((set, get) => ({
         activeChatCount: a.activeChatCount ?? 0,
         lastSeenAt: a.lastSeenAt,
         avatarUrl: a.avatarUrl || '/avatars/avatar-2.png',
+        shiftStartedAt: a.shiftStartedAt,
+        activeShiftSeconds: a.activeShiftSeconds ?? 0,
+        totalBreakSeconds: a.totalBreakSeconds ?? 0,
+        shiftDate: a.shiftDate,
+        totalLateReplies: a.totalLateReplies ?? 0,
+        avgFirstResponseSeconds: a.avgFirstResponseSeconds ?? 0,
       }));
 
       const rawQueue = (queueRes as any)?.queue || (queueRes as any)?.data || [];
@@ -370,9 +401,12 @@ export const useDesk = create<DeskState>((set, get) => ({
 
     socket.off('agent:status_changed');
     socket.off('agent:capacity_changed');
+    socket.off('agent:performance_updated');
+    socket.off('agent:shift_updated');
     socket.off('chat:queued');
     socket.off('chat:assigned');
     socket.off('chat:closed');
+    socket.off('chat:sla_breach');
 
     socket.on('agent:status_changed', (payload) => {
       set((state) => ({
@@ -386,6 +420,36 @@ export const useDesk = create<DeskState>((set, get) => ({
       set((state) => ({
         agents: state.agents.map((a) =>
           a.id === payload.agentId ? { ...a, chatCapacity: payload.chatCapacity } : a
+        ),
+      }));
+    });
+
+    socket.on('agent:performance_updated', (payload) => {
+      set((state) => ({
+        agents: state.agents.map((a) =>
+          a.id === payload.agentId
+            ? {
+                ...a,
+                totalLateReplies: payload.totalLateReplies,
+                avgFirstResponseSeconds: payload.avgFirstResponseSeconds,
+              }
+            : a
+        ),
+      }));
+    });
+
+    socket.on('agent:shift_updated', (payload) => {
+      set((state) => ({
+        agents: state.agents.map((a) =>
+          a.id === payload.agentId
+            ? {
+                ...a,
+                shiftStatus: payload.shiftStatus,
+                activeShiftSeconds: payload.activeShiftSeconds,
+                totalBreakSeconds: payload.totalBreakSeconds,
+                shiftStartedAt: payload.shiftStartedAt,
+              }
+            : a
         ),
       }));
     });
@@ -425,11 +489,22 @@ export const useDesk = create<DeskState>((set, get) => ({
 
     socket.on('chat:closed', (payload) => {
       set((state) => {
-        if (!payload.agentId) return state;
+        const remainingBreaches = state.slaBreaches.filter((b) => b.chatId !== payload.chatId);
+        if (!payload.agentId) return { slaBreaches: remainingBreaches };
         const updatedAgents = state.agents.map((a) =>
           a.id === payload.agentId ? { ...a, activeChatCount: Math.max(0, a.activeChatCount - 1) } : a
         );
-        return { agents: updatedAgents };
+        return { agents: updatedAgents, slaBreaches: remainingBreaches };
+      });
+    });
+
+    socket.on('chat:sla_breach', (payload) => {
+      set((state) => {
+        const exists = state.slaBreaches.some((b) => b.chatId === payload.chatId);
+        const updated = exists
+          ? state.slaBreaches.map((b) => (b.chatId === payload.chatId ? payload : b))
+          : [...state.slaBreaches, payload];
+        return { slaBreaches: updated };
       });
     });
   },
@@ -477,16 +552,19 @@ export const useDesk = create<DeskState>((set, get) => ({
     set({ isConnected });
   },
 
-  sendMessage: (chatId: string, text: string) => {
+  sendMessage: (chatId: string, text: string, imageUrl?: string) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed && !imageUrl) return;
 
     const sentAt = new Date().toISOString();
     const clientTempId = 'msg-' + Math.random().toString(36).slice(2, 9);
+    const messageType = imageUrl ? 'IMAGE' : 'TEXT';
     const newMessage: Message = {
       clientTempId,
       senderType: 'AGENT',
+      messageType,
       text: trimmed,
+      imageUrl,
       sentAt,
     };
 
@@ -497,7 +575,9 @@ export const useDesk = create<DeskState>((set, get) => ({
         clientTempId,
         chatId,
         senderType: 'AGENT',
+        messageType,
         text: trimmed,
+        imageUrl,
         sentAt,
       });
     }
@@ -615,6 +695,12 @@ export const useDesk = create<DeskState>((set, get) => ({
       };
     });
   },
+
+  dismissSlaBreach: (chatId: string) => {
+    set((state) => ({
+      slaBreaches: state.slaBreaches.filter((b) => b.chatId !== chatId),
+    }));
+  },
 }));
 
 export const useMe = () => useDesk((s) => s.me);
@@ -636,3 +722,4 @@ export const useSelectedChat = () => {
 
 export const useWaitingQueue = () => useDesk((s) => s.queuedChats);
 export const useAllAgents = () => useDesk((s) => s.agents);
+export const useSlaBreaches = () => useDesk((s) => s.slaBreaches);

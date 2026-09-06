@@ -26,7 +26,9 @@ export interface ChatMessagePayload {
   clientTempId?: string;
   chatId: string;
   senderType: SenderType;
+  messageType?: 'TEXT' | 'IMAGE';
   text: string;
+  imageUrl?: string;
   sentAt: string;
 }
 
@@ -55,9 +57,35 @@ export interface ChatSyncPayload {
     id?: string;
     clientTempId?: string;
     senderType: SenderType;
+    messageType?: 'TEXT' | 'IMAGE';
     text: string;
+    imageUrl?: string;
     sentAt: string;
   }>;
+}
+
+export interface AgentPerformanceUpdatedPayload {
+  agentId: string;
+  totalLateReplies: number;
+  avgFirstResponseSeconds: number | null;
+  lastFirstResponseSeconds?: number | null;
+}
+
+export interface AgentShiftUpdatedPayload {
+  agentId: string;
+  shiftStatus: ShiftStatus;
+  activeShiftSeconds: number;
+  totalBreakSeconds: number;
+  shiftStartedAt?: string | null;
+}
+
+export interface ChatSlaBreachPayload {
+  chatId: string;
+  customerId: string;
+  agentId?: string | null;
+  status: ChatStatus;
+  waitingSeconds: number;
+  breached: boolean;
 }
 
 export interface ServerToClientEvents {
@@ -69,6 +97,9 @@ export interface ServerToClientEvents {
   'chat:rejoin_failed': (payload: { chatId: string }) => void;
   'agent:status_changed': (payload: AgentStatusChangedPayload) => void;
   'agent:capacity_changed': (payload: AgentCapacityChangedPayload) => void;
+  'agent:performance_updated': (payload: AgentPerformanceUpdatedPayload) => void;
+  'agent:shift_updated': (payload: AgentShiftUpdatedPayload) => void;
+  'chat:sla_breach': (payload: ChatSlaBreachPayload) => void;
 }
 
 export interface ClientToServerEvents {
@@ -92,6 +123,11 @@ export interface AgentInfo {
   shiftStatus: ShiftStatus;
   chatCapacity: number;
   activeChatCount: number;
+  shiftStartedAt?: string | null;
+  activeShiftSeconds?: number;
+  totalBreakSeconds?: number;
+  totalLateReplies?: number;
+  avgFirstResponseSeconds?: number | null;
   lastSeenAt?: string | null;
   avatarUrl?: string | null;
 }
@@ -104,6 +140,9 @@ export interface ChatItem {
   assignedAgentId?: string | null;
   queuedAt?: string;
   assignedAt?: string | null;
+  firstResponseSeconds?: number | null;
+  lateReplyCount?: number;
+  slaBreached?: boolean;
   messages: Array<{
     id?: string;
     clientTempId?: string;
