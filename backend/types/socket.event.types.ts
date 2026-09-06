@@ -13,7 +13,9 @@ export interface ChatMessagePayload {
   clientTempId?: string;
   chatId: string;
   senderType: 'AGENT' | 'CUSTOMER';
+  messageType?: 'TEXT' | 'IMAGE';
   text: string;
+  imageUrl?: string;
   sentAt: string;
 }
 export interface ChatClosedPayload {
@@ -38,10 +40,36 @@ export interface ChatSyncPayload {
     id?: string;
     clientTempId?: string;
     senderType: 'AGENT' | 'CUSTOMER';
+    messageType?: 'TEXT' | 'IMAGE';
     text: string;
+    imageUrl?: string;
     sentAt: string;
   }>;
 }
+export interface AgentPerformanceUpdatedPayload {
+  agentId: string;
+  totalLateReplies: number;
+  avgFirstResponseSeconds: number | null;
+  lastFirstResponseSeconds?: number | null;
+}
+
+export interface AgentShiftUpdatedPayload {
+  agentId: string;
+  shiftStatus: 'OFFLINE' | 'AVAILABLE' | 'ON_BREAK' | 'WRAP_UP' | 'SHIFT_ENDED';
+  activeShiftSeconds: number;
+  totalBreakSeconds: number;
+  shiftStartedAt?: string | null;
+}
+
+export interface ChatSlaBreachPayload {
+  chatId: string;
+  customerId: string;
+  agentId?: string | null;
+  status: 'WAITING' | 'ACTIVE' | 'CLOSED';
+  waitingSeconds: number;
+  breached: boolean;
+}
+
 export interface ServerToClientEvents {
   'chat:assigned': (payload: ChatAssignedPayload) => void;
   'chat:message': (payload: ChatMessagePayload) => void;
@@ -51,6 +79,9 @@ export interface ServerToClientEvents {
   'chat:rejoin_failed': (payload: { chatId: string }) => void;
   'agent:status_changed': (payload: AgentStatusChangedPayload) => void;
   'agent:capacity_changed': (payload: AgentCapacityChangedPayload) => void;
+  'agent:performance_updated': (payload: AgentPerformanceUpdatedPayload) => void;
+  'agent:shift_updated': (payload: AgentShiftUpdatedPayload) => void;
+  'chat:sla_breach': (payload: ChatSlaBreachPayload) => void;
 }
 export interface ClientToServerEvents {
   'chat:new': (payload: ChatNewPayload) => void;

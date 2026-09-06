@@ -3,7 +3,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData } from '../types/socket.event.types';
-import { registerChatHandlers, sweepWaitingChats } from './sockets/chat.socket';
+import { registerChatHandlers, sweepWaitingChats, sweepSlaBreaches } from './sockets/chat.socket';
 import { registerAgentHandlers, registerManagerHandlers, sweepStaleAgents } from './sockets/agent.socket';
 import { authenticateSocket } from './middlewares/auth.middleware';
 import { errorHandler } from './middlewares/error.middleware';
@@ -102,9 +102,14 @@ if (require.main === module) {
     sweepWaitingChats(io).catch((err) => logger.error({ err: AppError.from(err) }, '[sweepWaitingChats] failed'));
   }, 10_000);
 
+  const slaBreachesInterval = setInterval(() => {
+    sweepSlaBreaches(io).catch((err) => logger.error({ err: AppError.from(err) }, '[sweepSlaBreaches] failed'));
+  }, 10_000);
+
   const shutdown = () => {
     clearInterval(staleAgentsInterval);
     clearInterval(waitingChatsInterval);
+    clearInterval(slaBreachesInterval);
     io.close();
     server.close(() => {
       process.exit(0);

@@ -14,40 +14,65 @@ datasource db {
 }
 
 model Agent {
-  id                  String    @id @default(uuid())
-  name                String
-  email               String    @unique
-  managerId           String?
-  shiftStatus         ShiftStatus @default(OFFLINE)
-  breakStartedAt      DateTime?
+  id                   String      @id @default(uuid())
+  name                 String
+  email                String      @unique
+  managerId            String?
+  shiftStatus          ShiftStatus @default(OFFLINE)
+  breakStartedAt       DateTime?
   breakDurationMinutes Int?
-  chatCapacity        Int       @default(2)   
-  activeChatCount     Int       @default(0)   
-  lastSeenAt          DateTime?              
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  chats               Chat[]
+  shiftStartedAt       DateTime?
+  activeShiftSeconds   Int         @default(0)
+  totalBreakSeconds    Int         @default(0)
+  shiftDate            String?
+  totalLateReplies     Int         @default(0)
+  avgFirstResponseSeconds Int?
+  chatCapacity         Int         @default(2)
+  activeChatCount      Int         @default(0)
+  lastSeenAt           DateTime?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  chats                Chat[]
 }
 
 model Chat {
-  id              String     @id @default(uuid())
-  customerId      String
-  status          ChatStatus @default(WAITING)
-  assignedAgentId String?
-  agent           Agent?     @relation(fields: [assignedAgentId], references: [id])
-  queuedAt        DateTime   @default(now())
-  assignedAt      DateTime?
-  closedAt        DateTime?
-  messages        Message[]
+  id                    String     @id @default(uuid())
+  customerId            String
+  status                ChatStatus @default(WAITING)
+  assignedAgentId       String?
+  agent                 Agent?     @relation(fields: [assignedAgentId], references: [id])
+  queuedAt              DateTime   @default(now())
+  assignedAt            DateTime?
+  firstResponseAt       DateTime?
+  firstResponseSeconds  Int?
+  lateReplyCount        Int        @default(0)
+  lastCustomerMessageAt DateTime?
+  lastAgentReplyAt      DateTime?
+  slaBreached           Boolean    @default(false)
+  closedAt              DateTime?
+  messages              Message[]
 }
 
 model Message {
-  id         String   @id @default(uuid())
-  chatId     String
-  chat       Chat     @relation(fields: [chatId], references: [id])
-  senderType SenderType
-  text       String
-  sentAt     DateTime @default(now())
+  id          String      @id @default(uuid())
+  chatId      String
+  chat        Chat        @relation(fields: [chatId], references: [id])
+  senderType  SenderType
+  messageType MessageType @default(TEXT)
+  text        String
+  imageUrl    String?
+  sentAt      DateTime    @default(now())
+}
+
+model CannedResponse {
+  id        String   @id @default(uuid())
+  shortcut  String
+  title     String
+  text      String
+  category  String?  @default("General")
+  agentId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum ShiftStatus {
@@ -67,4 +92,9 @@ enum ChatStatus {
 enum SenderType {
   AGENT
   CUSTOMER
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
 }

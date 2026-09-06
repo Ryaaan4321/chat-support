@@ -11,6 +11,7 @@ import { updateAgentCapacity } from '../repositories/agent.repositories';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { prisma } from '../../lib/prisma';
 import { drainWaitingChatsForAgent } from '../sockets/agent.socket';
+import { updateAgentShiftStatus } from '../services/performance.service';
 
 
 export async function signupHandler(req: Request, res: Response, next: NextFunction) {
@@ -76,16 +77,22 @@ export async function listAgentsHandler(req: Request, res: Response, next: NextF
 export async function logoutHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     if (req.user?.role === 'AGENT' && req.user.userId) {
-      await prisma.agent.update({
-        where: { id: req.user.userId },
-        data: { shiftStatus: 'OFFLINE' },
-      });
+      const updated = await updateAgentShiftStatus(req.user.userId, 'OFFLINE');
       const io = req.app.get('io');
       if (io) {
         io.to('managers').emit('agent:status_changed', {
           agentId: req.user.userId,
           shiftStatus: 'OFFLINE',
         });
+        if (updated) {
+          io.to('managers').emit('agent:shift_updated', {
+            agentId: req.user.userId,
+            shiftStatus: 'OFFLINE',
+            activeShiftSeconds: updated.activeShiftSeconds,
+            totalBreakSeconds: updated.totalBreakSeconds,
+            shiftStartedAt: updated.shiftStartedAt ? updated.shiftStartedAt.toISOString() : null,
+          });
+        }
       }
     }
     res.status(200).json({ success: true, message: 'Logged out successfully' });

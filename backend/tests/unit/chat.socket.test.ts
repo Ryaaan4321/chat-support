@@ -154,7 +154,13 @@ describe('chat:rejoin', () => {
 
 describe('chat:message', () => {
   it('persists then broadcasts to the chat room only', async () => {
-    mockMessageCreate.mockResolvedValue({ sentAt: new Date('2026-01-01T00:00:00Z') } as any);
+    mockMessageCreate.mockResolvedValue({
+      id: 'msg-1',
+      sentAt: new Date('2026-01-01T00:00:00Z'),
+      messageType: 'TEXT',
+      text: 'hi there',
+      imageUrl: null,
+    } as any);
 
     const { io, toEmitters } = makeFakeIo();
     const { socket, handlers } = makeFakeSocket({ role: 'AGENT', userId: 'agent-1' });
@@ -163,11 +169,51 @@ describe('chat:message', () => {
     await handlers['chat:message']({ chatId: 'chat-1', senderType: 'AGENT', text: 'hi there' });
 
     expect(mockMessageCreate).toHaveBeenCalledWith({
-      data: { chatId: 'chat-1', senderType: 'AGENT', text: 'hi there' },
+      data: { chatId: 'chat-1', senderType: 'AGENT', text: 'hi there', imageUrl: null, messageType: 'TEXT' },
     });
     expect(toEmitters['chat:chat-1'].emit).toHaveBeenCalledWith(
       'chat:message',
-      expect.objectContaining({ text: 'hi there' }),
+      expect.objectContaining({ text: 'hi there', messageType: 'TEXT' }),
+    );
+  });
+
+  it('persists and broadcasts image messages with imageUrl', async () => {
+    mockMessageCreate.mockResolvedValue({
+      id: 'msg-img-1',
+      sentAt: new Date('2026-01-01T00:00:00Z'),
+      messageType: 'IMAGE',
+      text: 'Check this invoice',
+      imageUrl: 'https://res.cloudinary.com/demo/image/upload/invoice.png',
+    } as any);
+
+    const { io, toEmitters } = makeFakeIo();
+    const { socket, handlers } = makeFakeSocket({ role: 'CUSTOMER', userId: 'cust-1' });
+    registerChatHandlers(io as any, socket as any);
+
+    await handlers['chat:message']({
+      chatId: 'chat-1',
+      senderType: 'CUSTOMER',
+      text: 'Check this invoice',
+      imageUrl: 'https://res.cloudinary.com/demo/image/upload/invoice.png',
+      messageType: 'IMAGE',
+    });
+
+    expect(mockMessageCreate).toHaveBeenCalledWith({
+      data: {
+        chatId: 'chat-1',
+        senderType: 'CUSTOMER',
+        text: 'Check this invoice',
+        imageUrl: 'https://res.cloudinary.com/demo/image/upload/invoice.png',
+        messageType: 'IMAGE',
+      },
+    });
+    expect(toEmitters['chat:chat-1'].emit).toHaveBeenCalledWith(
+      'chat:message',
+      expect.objectContaining({
+        messageType: 'IMAGE',
+        imageUrl: 'https://res.cloudinary.com/demo/image/upload/invoice.png',
+        text: 'Check this invoice',
+      }),
     );
   });
 });

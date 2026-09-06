@@ -7,6 +7,11 @@ import type {
 } from '../../types/socket.event.types';
 import { onNewChat, onAgentFreedUp } from '../services/assignment.service';
 import { closeChatAndRelease } from '../repositories/agent.repositories';
+import {
+  processCustomerMessageMetrics,
+  processAgentMessageMetrics,
+  checkSlaBreaches,
+} from '../services/performance.service';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
 import { AppError } from '../../lib/errors';
@@ -106,7 +111,9 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
         messages: chat.messages.map((m) => ({
           id: m.id,
           senderType: m.senderType,
+          messageType: m.messageType,
           text: m.text,
+          imageUrl: m.imageUrl || undefined,
           sentAt: m.sentAt.toISOString(),
         })),
       });
@@ -115,20 +122,47 @@ export function registerChatHandlers(io: IoServer, socket: IoSocket) {
     }
   });
 
-  socket.on('chat:message', async ({ chatId, senderType, text, clientTempId }) => {
+  socket.on('chat:message', async ({ chatId, senderType, text, clientTempId, imageUrl, messageType }) => {
     try {
-      if (!chatId || !senderType || !text) {
-        throw AppError.validation('chatId, senderType, and text are required');
+      const messageContent = text || '';
+      if (!chatId || !senderType || (!messageContent.trim() && !imageUrl)) {
+        throw AppError.validation('chatId, senderType, and either text or imageUrl are required');
       }
 
-      const message = await prisma.message.create({ data: { chatId, senderType, text } });
+      const finalMessageType = messageType || (imageUrl ? 'IMAGE' : 'TEXT');
+
+      const message = await prisma.message.create({
+        data: {
+          chatId,
+          senderType,
+          text: messageContent,
+          imageUrl: imageUrl || null,
+          messageType: finalMessageType,
+        },
+      });
+
+      if (senderType === 'CUSTOMER') {
+        await processCustomerMessageMetrics(chatId, message.sentAt);
+      } else if (senderType === 'AGENT') {
+        const perf = await processAgentMessageMetrics(chatId, socket.data.userId, message.sentAt);
+        if (perf && perf.agent) {
+          io.to('managers').emit('agent:performance_updated', {
+            agentId: perf.agent.id,
+            totalLateReplies: perf.agent.totalLateReplies,
+            avgFirstResponseSeconds: perf.agent.avgFirstResponseSeconds,
+            lastFirstResponseSeconds: perf.firstResponseSeconds,
+          });
+        }
+      }
 
       io.to(`chat:${chatId}`).emit('chat:message', {
         id: message.id,
         clientTempId,
         chatId,
         senderType,
-        text,
+        messageType: message.messageType,
+        text: message.text,
+        imageUrl: message.imageUrl || undefined,
         sentAt: message.sentAt.toISOString(),
       });
     } catch (err) {
@@ -193,5 +227,16 @@ export async function sweepWaitingChats(io: IoServer) {
     }
   } catch (err: any) {
     logger.warn({ msg: err?.message }, '[sweepWaitingChats] transient error');
+  }
+}
+
+export async function sweepSlaBreaches(io: IoServer) {
+  try {
+    const breaches = await checkSlaBreaches();
+    for (const breach of breaches) {
+      io.to('managers').emit('chat:sla_breach', breach);
+    }
+  } catch (err: any) {
+    logger.warn({ msg: err?.message }, '[sweepSlaBreaches] transient error');
   }
 }

@@ -8,6 +8,7 @@ import type {
 import { prisma } from '../../lib/prisma';
 import { onAgentFreedUp } from '../services/assignment.service';
 import { updateAgentCapacity, reconcileAgentActiveChatCount } from '../repositories/agent.repositories';
+import { updateAgentShiftStatus } from '../services/performance.service';
 import { logger } from '../../lib/logger';
 import { AppError } from '../../lib/errors';
 
@@ -74,14 +75,20 @@ export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
       if (agentId) {
         const remaining = io.sockets?.adapter?.rooms?.get(`agent:${agentId}`);
         if (!remaining || remaining.size === 0) {
-          await prisma.agent.update({
-            where: { id: agentId },
-            data: { shiftStatus: 'OFFLINE' },
-          });
+          const updated = await updateAgentShiftStatus(agentId, 'OFFLINE');
           io.to('managers').emit('agent:status_changed', {
             agentId,
             shiftStatus: 'OFFLINE',
           });
+          if (updated) {
+            io.to('managers').emit('agent:shift_updated', {
+              agentId,
+              shiftStatus: 'OFFLINE',
+              activeShiftSeconds: updated.activeShiftSeconds,
+              totalBreakSeconds: updated.totalBreakSeconds,
+              shiftStartedAt: updated.shiftStartedAt ? updated.shiftStartedAt.toISOString() : null,
+            });
+          }
         }
       }
     } catch (err) {
@@ -117,11 +124,17 @@ export function registerAgentHandlers(io: IoServer, socket: IoSocket) {
       if (!shiftStatus) {
         throw AppError.validation('shiftStatus is required');
       }
-      await prisma.agent.update({
-        where: { id: agentId },
-        data: { shiftStatus },
-      });
+      const updated = await updateAgentShiftStatus(agentId, shiftStatus);
       io.to('managers').emit('agent:status_changed', { agentId, shiftStatus });
+      if (updated) {
+        io.to('managers').emit('agent:shift_updated', {
+          agentId,
+          shiftStatus,
+          activeShiftSeconds: updated.activeShiftSeconds,
+          totalBreakSeconds: updated.totalBreakSeconds,
+          shiftStartedAt: updated.shiftStartedAt ? updated.shiftStartedAt.toISOString() : null,
+        });
+      }
       if (shiftStatus === 'AVAILABLE') {
         await drainWaitingChatsForAgent(io, agentId);
       }
