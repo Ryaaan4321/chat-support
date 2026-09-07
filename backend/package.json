@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "npm": "npm",
     "predev": "node scripts/free-port.js",
     "dev": "tsx watch src/server.ts",
     "build": "prisma generate",
