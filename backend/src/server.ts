@@ -18,10 +18,17 @@ export function createRealtimeServer() {
 
   app.use(express.json());
 
+  const rawOrigins = process.env.CLIENT_ORIGIN || 'http://localhost:3000';
+  const allowedOrigins = rawOrigins.split(',').map((o) => o.trim());
+
   app.use((req, res, next) => {
-    const origin = process.env.CLIENT_ORIGIN ?? 'http://localhost:3000';
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    const origin = req.headers.origin;
+    if (origin && (allowedOrigins.includes(origin) || allowedOrigins.includes('*'))) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0] || '*');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     if (req.method === 'OPTIONS') {
@@ -52,7 +59,13 @@ export function createRealtimeServer() {
     SocketData
   >(httpServer, {
     cors: {
-      origin: process.env.CLIENT_ORIGIN ?? 'http://localhost:3000',
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(null, true);
+        }
+      },
       credentials: true,
     },
   });
@@ -86,10 +99,10 @@ export function createRealtimeServer() {
 
 if (require.main === module) {
   const { httpServer, io } = createRealtimeServer();
-  const PORT = process.env.SOCKET_PORT ?? 4001;
+  const PORT = Number(process.env.PORT || process.env.SOCKET_PORT || 4001);
 
-  const server = httpServer.listen(PORT, () => {
-    logger.info({ port: PORT }, `Realtime service listening on :${PORT}`);
+  const server = httpServer.listen(PORT, '0.0.0.0', () => {
+    logger.info({ port: PORT }, `Realtime service listening on 0.0.0.0:${PORT}`);
   });
 
   server.on('error', (err: NodeJS.ErrnoException) => {
