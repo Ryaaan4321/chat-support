@@ -15,13 +15,27 @@ async function run() {
       DO $$
       BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'MessageType') THEN
-          CREATE TYPE "MessageType" AS ENUM ('TEXT', 'IMAGE');
+          CREATE TYPE "MessageType" AS ENUM ('TEXT', 'IMAGE', 'AUDIO', 'VIDEO');
+        ELSE
+          BEGIN
+            ALTER TYPE "MessageType" ADD VALUE IF NOT EXISTS 'AUDIO';
+          EXCEPTION
+            WHEN duplicate_object THEN null;
+          END;
+          BEGIN
+            ALTER TYPE "MessageType" ADD VALUE IF NOT EXISTS 'VIDEO';
+          EXCEPTION
+            WHEN duplicate_object THEN null;
+          END;
         END IF;
       END$$;
 
       ALTER TABLE "Message" 
       ADD COLUMN IF NOT EXISTS "messageType" "MessageType" NOT NULL DEFAULT 'TEXT',
       ADD COLUMN IF NOT EXISTS "imageUrl" TEXT;
+
+      ALTER TABLE "Agent"
+      ADD COLUMN IF NOT EXISTS "avatarUrl" TEXT;
 
       CREATE TABLE IF NOT EXISTS "CannedResponse" (
         "id" TEXT NOT NULL,

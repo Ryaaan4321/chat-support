@@ -5,12 +5,8 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { api, ApiError } from '@/lib/api';
 import { Headphones, ShieldCheck, UserCheck, Check, ArrowRight, Loader2 } from 'lucide-react';
-
-const AVATAR_OPTIONS = [
-  { id: 'avatar-1', src: '/avatars/avatar-1.png', label: 'Persona 1' },
-  { id: 'avatar-2', src: '/avatars/avatar-2.png', label: 'Persona 2' },
-  { id: 'avatar-3', src: '/avatars/avatar-3.png', label: 'Persona 3' },
-];
+import { UserAvatar } from '@/components/desk/user-avatar';
+import { CLOUDINARY_AVATARS } from '@/lib/avatars';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,8 +15,7 @@ export default function LoginPage() {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [managerKey, setManagerKey] = useState('');
-  const [selectedAvatar, setSelectedAvatar] = useState('/avatars/avatar-1.png');
+  const [selectedAvatar, setSelectedAvatar] = useState(CLOUDINARY_AVATARS[0].src);
   const [capacity, setCapacity] = useState(3);
 
   const [loading, setLoading] = useState(false);
@@ -53,18 +48,12 @@ export default function LoginPage() {
         handleRedirect('AGENT');
       } else if (role === 'MANAGER') {
         const cleanEmail = email.trim();
-        const key = managerKey.trim();
         if (!cleanEmail) {
           setErrorMsg('Please enter your manager email address.');
           setLoading(false);
           return;
         }
-        if (!key) {
-          setErrorMsg('Please enter your manager passkey.');
-          setLoading(false);
-          return;
-        }
-        await api.auth.loginManager({ email: cleanEmail, password: key });
+        await api.auth.loginManager({ email: cleanEmail });
         handleRedirect('MANAGER');
       } else {
         const cleanEmail = email.trim();
@@ -77,13 +66,11 @@ export default function LoginPage() {
         handleRedirect('CUSTOMER');
       }
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        setErrorMsg(err.message);
-      } else if (err instanceof Error) {
-        setErrorMsg(err.message);
-      } else {
-        setErrorMsg('Sign in failed. Please check your credentials.');
-      }
+      const msg =
+        (err instanceof ApiError && err.message && err.message !== '[object Object]') ? err.message :
+        (err instanceof Error && err.message && err.message !== '[object Object]') ? err.message :
+        'Sign in failed. Please check your credentials and try again.';
+      setErrorMsg(msg);
     } finally {
       setLoading(false);
     }
@@ -95,12 +82,12 @@ export default function LoginPage() {
     setErrorMsg(null);
 
     if (!name.trim()) {
-      setErrorMsg('Full name is required');
+      setErrorMsg('Full name is required.');
       setLoading(false);
       return;
     }
     if (!email.trim()) {
-      setErrorMsg('Email address is required');
+      setErrorMsg('Valid email address is required.');
       setLoading(false);
       return;
     }
@@ -116,13 +103,11 @@ export default function LoginPage() {
 
       handleRedirect(res.user.role);
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        setErrorMsg(err.message);
-      } else if (err instanceof Error) {
-        setErrorMsg(err.message);
-      } else {
-        setErrorMsg('Registration failed. Please check your details.');
-      }
+      const msg =
+        (err instanceof ApiError && err.message && err.message !== '[object Object]') ? err.message :
+        (err instanceof Error && err.message && err.message !== '[object Object]') ? err.message :
+        'Unable to complete registration. Please check your details and try again.';
+      setErrorMsg(msg);
     } finally {
       setLoading(false);
     }
@@ -250,21 +235,6 @@ export default function LoginPage() {
                   />
                 </div>
 
-                {role === 'MANAGER' && (
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
-                      Manager Passkey
-                    </label>
-                    <input
-                      type="password"
-                      value={managerKey}
-                      onChange={(e) => setManagerKey(e.target.value)}
-                      placeholder="swish-manager-super-secret-2026"
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-slate-900"
-                    />
-                  </div>
-                )}
-
                 <button
                   type="submit"
                   disabled={loading}
@@ -312,35 +282,34 @@ export default function LoginPage() {
                   <label className="block text-xs font-medium text-slate-700 mb-2">
                     Choose Profile Avatar
                   </label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {AVATAR_OPTIONS.map((av) => {
+                  <div className="grid grid-cols-4 gap-2">
+                    {CLOUDINARY_AVATARS.map((av) => {
                       const isSelected = selectedAvatar === av.src;
                       return (
                         <button
                           key={av.id}
                           type="button"
                           onClick={() => setSelectedAvatar(av.src)}
-                          className={`relative flex flex-col items-center p-2 rounded-xl border-2 transition-all ${
+                          className={`relative flex flex-col items-center p-2 rounded-xl border-2 transition-all cursor-pointer ${
                             isSelected
-                              ? 'border-blue-600 bg-blue-50/50 shadow-xs'
-                              : 'border-slate-200 hover:border-slate-300 bg-white'
+                              ? 'border-blue-600 bg-blue-50/50 shadow-xs ring-1 ring-blue-500/30'
+                              : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/60'
                           }`}
                         >
-                          <div className="w-14 h-14 relative rounded-full overflow-hidden bg-slate-100 mb-1">
-                            <Image
+                          <div className="mb-1">
+                            <UserAvatar
                               src={av.src}
                               alt={av.label}
-                              fill
-                              sizes="56px"
-                              className="object-cover"
+                              size="xl"
+                              className="border-none shadow-none bg-slate-100/70"
                             />
                           </div>
-                          <span className="text-[11px] font-medium text-slate-600">
+                          <span className="text-[11px] font-medium text-slate-700 truncate max-w-full">
                             {av.label}
                           </span>
                           {isSelected && (
-                            <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center">
-                              <Check className="w-3 h-3" />
+                            <div className="absolute top-1 right-1 size-4 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                              <Check className="size-2.5 stroke-[3]" />
                             </div>
                           )}
                         </button>

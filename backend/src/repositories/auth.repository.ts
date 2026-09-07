@@ -35,6 +35,7 @@ export async function createAgent(data: {
   name: string;
   email: string;
   chatCapacity?: number;
+  avatarUrl?: string;
 }) {
   try {
     return await prisma.agent.create({
@@ -43,6 +44,7 @@ export async function createAgent(data: {
         email: data.email.trim().toLowerCase(),
         chatCapacity: data.chatCapacity ?? 2,
         shiftStatus: 'AVAILABLE',
+        avatarUrl: data.avatarUrl || null,
       },
     });
   } catch (err) {

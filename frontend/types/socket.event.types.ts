@@ -26,7 +26,7 @@ export interface ChatMessagePayload {
   clientTempId?: string;
   chatId: string;
   senderType: SenderType;
-  messageType?: 'TEXT' | 'IMAGE';
+  messageType?: 'TEXT' | 'IMAGE' | 'AUDIO' | 'VIDEO';
   text: string;
   imageUrl?: string;
   sentAt: string;
@@ -57,7 +57,7 @@ export interface ChatSyncPayload {
     id?: string;
     clientTempId?: string;
     senderType: SenderType;
-    messageType?: 'TEXT' | 'IMAGE';
+    messageType?: 'TEXT' | 'IMAGE' | 'AUDIO' | 'VIDEO';
     text: string;
     imageUrl?: string;
     sentAt: string;

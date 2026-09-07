@@ -2,6 +2,7 @@ import { AgentInfo } from '../../types/socket.event.types';
 import { createSocketClient } from '../socket';
 import { api, getStoredToken } from '../api';
 import { Chat, StoreSet } from './types';
+import { resolveAvatarUrl, DEFAULT_CUSTOMER_AVATAR } from '../avatars';
 
 export async function initManagerSession(set: StoreSet): Promise<void> {
   set({ isHydrating: true });
@@ -31,7 +32,7 @@ export async function initManagerSession(set: StoreSet): Promise<void> {
           shiftStatus: 'AVAILABLE',
           chatCapacity: 0,
           activeChatCount: 0,
-          avatarUrl: u.avatarUrl || '/avatars/avatar-2.png',
+          avatarUrl: resolveAvatarUrl(u.avatarUrl, 'MANAGER'),
         },
       });
     }
@@ -45,7 +46,7 @@ export async function initManagerSession(set: StoreSet): Promise<void> {
       chatCapacity: a.chatCapacity ?? 3,
       activeChatCount: a.activeChatCount ?? 0,
       lastSeenAt: a.lastSeenAt,
-      avatarUrl: a.avatarUrl || '/avatars/avatar-2.png',
+      avatarUrl: resolveAvatarUrl(a.avatarUrl, 'AGENT'),
       shiftStartedAt: a.shiftStartedAt,
       activeShiftSeconds: a.activeShiftSeconds ?? 0,
       totalBreakSeconds: a.totalBreakSeconds ?? 0,
@@ -59,7 +60,7 @@ export async function initManagerSession(set: StoreSet): Promise<void> {
       id: c.id,
       customerId: c.customerId,
       customer: c.customerId,
-      customerAvatar: '/avatars/avatar-1.png',
+      customerAvatar: DEFAULT_CUSTOMER_AVATAR,
       status: c.status,
       queuedAt: c.queuedAt,
       messages: (c.messages || []).map((m: any) => ({
@@ -151,7 +152,7 @@ export async function initManagerSession(set: StoreSet): Promise<void> {
         id: payload.chatId,
         customerId: `cust-${payload.chatId.slice(0, 6)}`,
         customer: `cust-${payload.chatId.slice(0, 6)}`,
-        customerAvatar: '/avatars/avatar-1.png',
+        customerAvatar: DEFAULT_CUSTOMER_AVATAR,
         status: 'WAITING',
         queuedAt: new Date().toISOString(),
         messages: [{ senderType: 'CUSTOMER', text: 'Waiting for specialist...', sentAt: new Date().toISOString() }],

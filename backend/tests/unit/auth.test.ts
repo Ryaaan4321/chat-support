@@ -68,6 +68,12 @@ describe('Auth Service', () => {
         shiftStatus: 'AVAILABLE',
         breakStartedAt: null,
         breakDurationMinutes: null,
+        shiftStartedAt: null,
+        activeShiftSeconds: 0,
+        totalBreakSeconds: 0,
+        shiftDate: null,
+        totalLateReplies: 0,
+        avgFirstResponseSeconds: null,
         chatCapacity: 3,
         activeChatCount: 1,
         lastSeenAt: new Date(),
@@ -110,8 +116,14 @@ describe('Auth Service', () => {
       expect(verified.email).toBe('supervisor@swish.ops');
     });
 
-    it('rejects invalid manager secretKey', async () => {
-      await expect(loginManager('supervisor@swish.ops', 'wrong-key')).rejects.toThrow(AppError);
+    it('allows manager login with email without requiring secretKey', async () => {
+      const result = await loginManager('supervisor@swish.ops');
+      expect(result.user.role).toBe('MANAGER');
+      expect(result.token).toBeDefined();
+    });
+
+    it('rejects invalid or empty manager email', async () => {
+      await expect(loginManager('')).rejects.toThrow(AppError);
     });
   });
 
@@ -145,6 +157,12 @@ describe('Auth Service', () => {
         shiftStatus: 'ON_BREAK',
         breakStartedAt: null,
         breakDurationMinutes: null,
+        shiftStartedAt: null,
+        activeShiftSeconds: 0,
+        totalBreakSeconds: 0,
+        shiftDate: null,
+        totalLateReplies: 0,
+        avgFirstResponseSeconds: null,
         chatCapacity: 2,
         activeChatCount: 0,
         lastSeenAt: new Date(),

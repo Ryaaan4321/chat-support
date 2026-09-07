@@ -216,6 +216,85 @@ describe('chat:message', () => {
       }),
     );
   });
+
+  it('persists and broadcasts audio voice note messages with media url', async () => {
+    mockMessageCreate.mockResolvedValue({
+      id: 'msg-audio-1',
+      sentAt: new Date('2026-01-01T00:00:00Z'),
+      messageType: 'AUDIO',
+      text: '',
+      imageUrl: 'https://res.cloudinary.com/demo/video/upload/voice_note.webm',
+    } as any);
+
+    const { io, toEmitters } = makeFakeIo();
+    const { socket, handlers } = makeFakeSocket({ role: 'AGENT', userId: 'agent-1' });
+    registerChatHandlers(io as any, socket as any);
+
+    await handlers['chat:message']({
+      chatId: 'chat-1',
+      senderType: 'AGENT',
+      text: '',
+      imageUrl: 'https://res.cloudinary.com/demo/video/upload/voice_note.webm',
+      messageType: 'AUDIO',
+    });
+
+    expect(mockMessageCreate).toHaveBeenCalledWith({
+      data: {
+        chatId: 'chat-1',
+        senderType: 'AGENT',
+        text: '',
+        imageUrl: 'https://res.cloudinary.com/demo/video/upload/voice_note.webm',
+        messageType: 'AUDIO',
+      },
+    });
+    expect(toEmitters['chat:chat-1'].emit).toHaveBeenCalledWith(
+      'chat:message',
+      expect.objectContaining({
+        messageType: 'AUDIO',
+        imageUrl: 'https://res.cloudinary.com/demo/video/upload/voice_note.webm',
+      }),
+    );
+  });
+
+  it('persists and broadcasts video messages with video media url', async () => {
+    mockMessageCreate.mockResolvedValue({
+      id: 'msg-video-1',
+      sentAt: new Date('2026-01-01T00:00:00Z'),
+      messageType: 'VIDEO',
+      text: 'Bug demo screen recording',
+      imageUrl: 'https://res.cloudinary.com/demo/video/upload/demo.mp4',
+    } as any);
+
+    const { io, toEmitters } = makeFakeIo();
+    const { socket, handlers } = makeFakeSocket({ role: 'CUSTOMER', userId: 'cust-1' });
+    registerChatHandlers(io as any, socket as any);
+
+    await handlers['chat:message']({
+      chatId: 'chat-1',
+      senderType: 'CUSTOMER',
+      text: 'Bug demo screen recording',
+      imageUrl: 'https://res.cloudinary.com/demo/video/upload/demo.mp4',
+      messageType: 'VIDEO',
+    });
+
+    expect(mockMessageCreate).toHaveBeenCalledWith({
+      data: {
+        chatId: 'chat-1',
+        senderType: 'CUSTOMER',
+        text: 'Bug demo screen recording',
+        imageUrl: 'https://res.cloudinary.com/demo/video/upload/demo.mp4',
+        messageType: 'VIDEO',
+      },
+    });
+    expect(toEmitters['chat:chat-1'].emit).toHaveBeenCalledWith(
+      'chat:message',
+      expect.objectContaining({
+        messageType: 'VIDEO',
+        imageUrl: 'https://res.cloudinary.com/demo/video/upload/demo.mp4',
+        text: 'Bug demo screen recording',
+      }),
+    );
+  });
 });
 
 describe('chat:closed', () => {

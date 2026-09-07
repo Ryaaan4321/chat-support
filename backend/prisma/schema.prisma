@@ -17,6 +17,7 @@ model Agent {
   id                   String      @id @default(uuid())
   name                 String
   email                String      @unique
+  avatarUrl            String?
   managerId            String?
   shiftStatus          ShiftStatus @default(OFFLINE)
   breakStartedAt       DateTime?
@@ -97,4 +98,6 @@ enum SenderType {
 enum MessageType {
   TEXT
   IMAGE
+  AUDIO
+  VIDEO
 }

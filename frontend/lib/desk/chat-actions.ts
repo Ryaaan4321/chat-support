@@ -2,6 +2,7 @@ import { ShiftStatus, ChatItem } from '../../types/socket.event.types';
 import { getActiveSocket } from '../socket';
 import { getStoredToken } from '../api';
 import { Chat, Message, StoreSet, StoreGet } from './types';
+import { DEFAULT_CUSTOMER_AVATAR } from '../avatars';
 
 export function createChatActions(set: StoreSet, get: StoreGet) {
   return {
@@ -48,13 +49,18 @@ export function createChatActions(set: StoreSet, get: StoreGet) {
       set({ isConnected });
     },
 
-    sendMessage: (chatId: string, text: string, imageUrl?: string) => {
+    sendMessage: (
+      chatId: string,
+      text: string,
+      imageUrl?: string,
+      explicitMessageType?: 'TEXT' | 'IMAGE' | 'AUDIO' | 'VIDEO'
+    ) => {
       const trimmed = text.trim();
       if (!trimmed && !imageUrl) return;
 
       const sentAt = new Date().toISOString();
       const clientTempId = 'msg-' + Math.random().toString(36).slice(2, 9);
-      const messageType = imageUrl ? 'IMAGE' : 'TEXT';
+      const messageType = explicitMessageType || (imageUrl ? 'IMAGE' : 'TEXT');
       const newMessage: Message = {
         clientTempId,
         senderType: 'AGENT',
@@ -151,7 +157,7 @@ export function createChatActions(set: StoreSet, get: StoreGet) {
           id: chatId,
           customerId: custId,
           customer: custId,
-          customerAvatar: '/avatars/avatar-1.png',
+          customerAvatar: DEFAULT_CUSTOMER_AVATAR,
           status: 'ACTIVE',
           assignedAgentId: agentId,
           assignedAt: new Date().toISOString(),
@@ -176,7 +182,7 @@ export function createChatActions(set: StoreSet, get: StoreGet) {
         ...incomingChat,
         customer: (incomingChat as any).customer || incomingChat.customerId,
         customerId: incomingChat.customerId || (incomingChat as any).customer,
-        customerAvatar: '/avatars/avatar-1.png',
+        customerAvatar: DEFAULT_CUSTOMER_AVATAR,
         unreadCount: (incomingChat as any).unreadCount || 0,
         unread: (incomingChat as any).unread || 0,
       };

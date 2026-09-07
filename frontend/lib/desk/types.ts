@@ -29,7 +29,7 @@ export interface Message {
   id?: string;
   clientTempId?: string;
   senderType: 'AGENT' | 'CUSTOMER' | string;
-  messageType?: 'TEXT' | 'IMAGE';
+  messageType?: 'TEXT' | 'IMAGE' | 'AUDIO' | 'VIDEO';
   text: string;
   imageUrl?: string;
   sentAt: string;
@@ -74,7 +74,12 @@ export interface DeskState {
   setFilterStatus: (filter: string) => void;
   setIsConnected: (connected: boolean) => void;
 
-  sendMessage: (chatId: string, text: string, imageUrl?: string) => void;
+  sendMessage: (
+    chatId: string,
+    text: string,
+    imageUrl?: string,
+    messageType?: 'TEXT' | 'IMAGE' | 'AUDIO' | 'VIDEO'
+  ) => void;
   closeChat: (chatId: string) => void;
   updateAgentCapacity: (agentId: string, capacity: number) => void;
   syncChatAssigned: (chatId: string, agentId: string, customerId?: string) => void;

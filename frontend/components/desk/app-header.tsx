@@ -8,6 +8,8 @@ import { useMe, useMyActiveChats } from '@/lib/desk-store';
 import { StatusPills } from './status-pills';
 import { api } from '@/lib/api';
 import { getActiveSocket, disconnectActiveSocket } from '@/lib/socket';
+import { UserAvatar } from './user-avatar';
+import { resolveAvatarUrl } from '@/lib/avatars';
 
 export function AppHeader() {
   const router = useRouter();
@@ -17,7 +19,7 @@ export function AppHeader() {
   const isManager = pathname.startsWith('/manager');
   const isCustomer = pathname.startsWith('/customer');
 
-  const avatarUrl = (me as any)?.avatarUrl || '/avatars/avatar-2.png';
+  const avatarUrl = resolveAvatarUrl((me as any)?.avatarUrl, isManager ? 'MANAGER' : 'AGENT');
 
   const handleLogout = async () => {
     const socket = getActiveSocket();
@@ -67,15 +69,13 @@ export function AppHeader() {
                 <p className="text-[10px] text-[#64748B]">{isManager ? 'Operations' : me.team}</p>
               </div>
             )}
-            <div className="hidden sm:block size-8 rounded-full relative overflow-hidden bg-[#EFF6FF] border border-[#BFDBFE] shrink-0">
-              <Image
-                src={avatarUrl}
-                alt={me.name || 'User'}
-                fill
-                sizes="32px"
-                className="object-cover"
-              />
-            </div>
+            <UserAvatar
+              src={avatarUrl}
+              alt={me.name || 'User'}
+              size="md"
+              fallbackText={me.name || 'User'}
+              className="hidden sm:flex bg-[#EFF6FF] border-[#BFDBFE]"
+            />
 
             <button
               type="button"

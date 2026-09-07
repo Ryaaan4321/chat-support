@@ -3,8 +3,6 @@ import { signToken, verifyToken, JwtUserPayload } from '../../lib/jwt';
 import { AppError } from '../../lib/errors';
 import crypto from 'crypto';
 
-const MANAGER_SECRET_KEY = process.env.MANAGER_SECRET_KEY || 'swish-manager-super-secret-2026';
-
 export async function signupUser(data: {
   name: string;
   email: string;
@@ -33,6 +31,7 @@ export async function signupUser(data: {
       name: cleanName,
       email: cleanEmail,
       chatCapacity: data.chatCapacity ?? 3,
+      avatarUrl: data.avatarUrl,
     });
 
     const payload: JwtUserPayload = {
@@ -122,6 +121,7 @@ export async function loginAgent(email: string) {
     role: 'AGENT',
     email: agent.email,
     name: agent.name,
+    avatarUrl: agent.avatarUrl || undefined,
   };
 
   const token = signToken(payload);
@@ -133,6 +133,7 @@ export async function loginAgent(email: string) {
       name: agent.name,
       email: agent.email,
       role: 'AGENT' as const,
+      avatarUrl: agent.avatarUrl || undefined,
       shiftStatus: agent.shiftStatus,
       chatCapacity: agent.chatCapacity,
       activeChatCount: agent.activeChatCount,
@@ -140,14 +141,11 @@ export async function loginAgent(email: string) {
   };
 }
 
-export async function loginManager(email: string, secretKey?: string) {
+export async function loginManager(email: string, _secretKey?: string) {
   if (!email || typeof email !== 'string') {
     throw AppError.validation('Valid manager email is required');
   }
 
-  if (secretKey && secretKey !== MANAGER_SECRET_KEY) {
-    throw AppError.unauthorized('Invalid manager authorization key');
-  }
   const managerId = `mgr-${crypto.createHash('md5').update(email.toLowerCase().trim()).digest('hex').slice(0, 8)}`;
   const payload: JwtUserPayload = {
     userId: managerId,
@@ -197,6 +195,7 @@ export async function getProfile(userId: string, role: string) {
       name: agent.name,
       email: agent.email,
       role: 'AGENT' as const,
+      avatarUrl: agent.avatarUrl || undefined,
       shiftStatus: agent.shiftStatus,
       chatCapacity: agent.chatCapacity,
       activeChatCount: agent.activeChatCount,

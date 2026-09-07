@@ -6,7 +6,7 @@ import { AppError } from '../../lib/errors';
 export async function getMyActiveChatsHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     if (!req.user) {
-      return res.status(401).json({ success: false, error: 'Unauthorized' });
+      throw AppError.unauthorized('Authentication required to view active chats');
     }
 
     const chats = await prisma.chat.findMany({

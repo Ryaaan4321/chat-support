@@ -18,15 +18,22 @@ import {
   Maximize2,
   AlertCircle,
   RefreshCw,
+  Mic,
+  Film,
+  Volume2,
 } from 'lucide-react';
 import { TimeDisplay } from './time-display';
 import { useSlashCommand } from '@/hooks/use-slash-command';
 import { SlashCommandMenu } from './slash-command-menu';
 import { ImageLightbox } from './image-lightbox';
 import {
-  uploadImageToCloudinaryDirect,
-  validateImageFile,
-} from '@/lib/image-upload';
+  uploadMediaToCloudinaryDirect,
+  validateMediaFile,
+} from '@/lib/media-upload';
+import { VoiceRecorder } from './voice-recorder';
+import { MediaBubble } from './media-bubble';
+import { UserAvatar } from './user-avatar';
+import { resolveAvatarUrl } from '@/lib/avatars';
 
 const CANNED_RESPONSES = [
   'Checking your order status right now.',
@@ -47,10 +54,12 @@ export function Thread() {
   const [input, setInput] = useState('');
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [pendingImage, setPendingImage] = useState<{
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [pendingMedia, setPendingMedia] = useState<{
     file: File;
     previewUrl: string;
     uploadedUrl?: string;
+    messageType: 'IMAGE' | 'AUDIO' | 'VIDEO';
     progress: number;
     error?: string;
   } | null>(null);
@@ -97,43 +106,45 @@ export function Thread() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const validation = validateImageFile(file);
-    if (!validation.valid) {
-      alert(validation.error || 'Invalid image file');
+    const validation = validateMediaFile(file);
+    if (!validation.valid || !validation.messageType) {
+      alert(validation.error || 'Invalid media file');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
     const previewUrl = URL.createObjectURL(file);
-    setPendingImage({
+    setPendingMedia({
       file,
       previewUrl,
+      messageType: validation.messageType,
       progress: 5,
     });
     setIsUploading(true);
 
     try {
-      const res = await uploadImageToCloudinaryDirect(file, {
+      const res = await uploadMediaToCloudinaryDirect(file, {
         onProgress: (percent) => {
-          setPendingImage((prev) => (prev ? { ...prev, progress: percent } : null));
+          setPendingMedia((prev) => (prev ? { ...prev, progress: percent } : null));
         },
       });
 
-      setPendingImage((prev) =>
+      setPendingMedia((prev) =>
         prev
           ? {
               ...prev,
               uploadedUrl: res.secureUrl,
+              messageType: res.messageType,
               progress: 100,
             }
           : null
       );
     } catch (err: any) {
-      setPendingImage((prev) =>
+      setPendingMedia((prev) =>
         prev
           ? {
               ...prev,
-              error: err?.message || 'Failed to upload image. Please try again.',
+              error: err?.message || 'Failed to upload media. Please try again.',
             }
           : null
       );
@@ -143,26 +154,40 @@ export function Thread() {
     }
   };
 
-  const handleRetryUpload = async () => {
-    if (!pendingImage?.file) return;
+  const handleSendVoiceNote = async (audioFile: File) => {
+    if (!chat) return;
+    setIsRecordingVoice(false);
     setIsUploading(true);
-    setPendingImage((prev) => (prev ? { ...prev, error: undefined, progress: 5 } : null));
+    const previewUrl = URL.createObjectURL(audioFile);
+    setPendingMedia({
+      file: audioFile,
+      previewUrl,
+      messageType: 'AUDIO',
+      progress: 15,
+    });
 
     try {
-      const res = await uploadImageToCloudinaryDirect(pendingImage.file, {
+      const res = await uploadMediaToCloudinaryDirect(audioFile, {
         onProgress: (percent) => {
-          setPendingImage((prev) => (prev ? { ...prev, progress: percent } : null));
+          setPendingMedia((prev) => (prev ? { ...prev, progress: percent } : null));
         },
       });
-      setPendingImage((prev) =>
-        prev ? { ...prev, uploadedUrl: res.secureUrl, progress: 100 } : null
-      );
+
+      if (typeof sendMessage === 'function') {
+        sendMessage(chat.id, '', res.secureUrl, 'AUDIO');
+      } else {
+        const store = useDesk.getState() as any;
+        if (typeof store.sendMessage === 'function') {
+          store.sendMessage(chat.id, '', res.secureUrl, 'AUDIO');
+        }
+      }
+      setPendingMedia(null);
     } catch (err: any) {
-      setPendingImage((prev) =>
+      setPendingMedia((prev) =>
         prev
           ? {
               ...prev,
-              error: err?.message || 'Failed to upload image. Please try again.',
+              error: err?.message || 'Failed to upload voice note. Please try again.',
             }
           : null
       );
@@ -171,35 +196,64 @@ export function Thread() {
     }
   };
 
-  const handleCancelImage = () => {
-    if (pendingImage?.previewUrl) {
-      URL.revokeObjectURL(pendingImage.previewUrl);
+  const handleRetryUpload = async () => {
+    if (!pendingMedia?.file) return;
+    setIsUploading(true);
+    setPendingMedia((prev) => (prev ? { ...prev, error: undefined, progress: 5 } : null));
+
+    try {
+      const res = await uploadMediaToCloudinaryDirect(pendingMedia.file, {
+        onProgress: (percent) => {
+          setPendingMedia((prev) => (prev ? { ...prev, progress: percent } : null));
+        },
+      });
+      setPendingMedia((prev) =>
+        prev ? { ...prev, uploadedUrl: res.secureUrl, messageType: res.messageType, progress: 100 } : null
+      );
+    } catch (err: any) {
+      setPendingMedia((prev) =>
+        prev
+          ? {
+              ...prev,
+              error: err?.message || 'Failed to upload media. Please try again.',
+            }
+          : null
+      );
+    } finally {
+      setIsUploading(false);
     }
-    setPendingImage(null);
+  };
+
+  const handleCancelMedia = () => {
+    if (pendingMedia?.previewUrl) {
+      URL.revokeObjectURL(pendingMedia.previewUrl);
+    }
+    setPendingMedia(null);
     setIsUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleSend = () => {
     const trimmed = input.trim();
-    const uploadedUrl = pendingImage?.uploadedUrl;
+    const uploadedUrl = pendingMedia?.uploadedUrl;
+    const messageType = pendingMedia?.messageType;
 
     if ((!trimmed && !uploadedUrl) || isUploading || !chat) return;
 
     if (typeof sendMessage === 'function') {
-      sendMessage(chat.id, trimmed, uploadedUrl);
+      sendMessage(chat.id, trimmed, uploadedUrl, messageType);
     } else {
       const store = useDesk.getState() as any;
       if (typeof store.sendMessage === 'function') {
-        store.sendMessage(chat.id, trimmed, uploadedUrl);
+        store.sendMessage(chat.id, trimmed, uploadedUrl, messageType);
       }
     }
 
     setInput('');
-    if (pendingImage?.previewUrl) {
-      URL.revokeObjectURL(pendingImage.previewUrl);
+    if (pendingMedia?.previewUrl) {
+      URL.revokeObjectURL(pendingMedia.previewUrl);
     }
-    setPendingImage(null);
+    setPendingMedia(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -242,17 +296,19 @@ export function Thread() {
     customerId ||
     'Customer';
 
-  const customerAvatar =
+  const customerAvatar = resolveAvatarUrl(
     chat.customerAvatar ||
     (chat as any).avatarUrl ||
-    (customerObj as any)?.avatarUrl ||
-    '/avatars/avatar-1.png';
+    (customerObj as any)?.avatarUrl,
+    'CUSTOMER'
+  );
 
-  const agentAvatar =
-    (me as any)?.avatarUrl ||
-    '/avatars/avatar-2.png';
+  const agentAvatar = resolveAvatarUrl(
+    (me as any)?.avatarUrl,
+    'AGENT'
+  );
 
-  const canSend = Boolean((input.trim() || pendingImage?.uploadedUrl) && !isUploading);
+  const canSend = (Boolean(input.trim()) || Boolean(pendingMedia?.uploadedUrl)) && !isUploading;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -272,15 +328,13 @@ export function Thread() {
             <ArrowLeft className="size-4" />
           </button>
 
-          <div className="size-9 rounded-full relative overflow-hidden bg-[#EFF6FF] border border-[#BFDBFE] shrink-0">
-            <Image
-              src={customerAvatar}
-              alt={customerName}
-              fill
-              sizes="36px"
-              className="object-cover"
-            />
-          </div>
+          <UserAvatar
+            src={customerAvatar}
+            alt={customerName}
+            size="lg"
+            fallbackText={customerName}
+            className="bg-[#EFF6FF] border-[#BFDBFE]"
+          />
 
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
@@ -291,11 +345,15 @@ export function Thread() {
                 className="size-2 rounded-full bg-emerald-500 ring-2 ring-emerald-100 shrink-0"
                 title="Active"
               />
+              <span className="text-[11px] text-[#64748B] font-mono hidden xs:inline truncate">
+                {customerObj?.email || `${customerId.slice(0, 8)}@guest.swish`}
+              </span>
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#94A3B8] truncate">
+
+            <div className="flex items-center gap-2 text-[11px] text-[#64748B] font-mono">
               <span className="flex items-center gap-1">
-                <Clock className="size-3 shrink-0" />
-                <TimeDisplay timestamp={chat.assignedAt} fallback="Live" />
+                <Clock className="size-3" />
+                <span>{chat.messages.length} msg{chat.messages.length !== 1 ? 's' : ''}</span>
               </span>
               <span>•</span>
               <span className="truncate">ID: {customerId.slice(0, 8)}</span>
@@ -340,15 +398,13 @@ export function Thread() {
                 isAgent ? 'ml-auto flex-row-reverse' : 'mr-auto flex-row'
               )}
             >
-              <div className="size-7 rounded-full relative overflow-hidden bg-white border border-[#E2E8F0] shrink-0 mb-1">
-                <Image
-                  src={avatarToUse}
-                  alt={isAgent ? 'Agent' : 'Customer'}
-                  fill
-                  sizes="28px"
-                  className="object-cover"
-                />
-              </div>
+              <UserAvatar
+                src={avatarToUse}
+                alt={isAgent ? 'Agent' : customerName}
+                size="sm"
+                fallbackText={isAgent ? 'Agent' : customerName}
+                className="mb-1 bg-white border-[#E2E8F0]"
+              />
 
               <div className={cn('flex flex-col', isAgent ? 'items-end' : 'items-start')}>
                 <div className="flex items-center gap-1.5 mb-1 px-1 text-[10px] font-mono text-[#94A3B8]">
@@ -357,24 +413,14 @@ export function Thread() {
                   <TimeDisplay timestamp={typeof timeVal === 'string' ? timeVal : timeVal.toISOString()} fallback="" />
                 </div>
 
-                {/* Attached Image with click to expand lightbox */}
+                {/* Attached Media (Image, Audio Voice Note, Video) */}
                 {m.imageUrl && (
-                  <div
-                    onClick={() => setLightboxUrl(m.imageUrl)}
-                    className="rounded-2xl overflow-hidden border border-slate-200/80 mb-1 cursor-pointer max-w-[260px] group relative hover:opacity-95 transition-all shadow-xs bg-slate-100"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={m.imageUrl}
-                      alt="Chat attachment"
-                      className="w-full max-h-56 object-cover group-hover:scale-102 transition-transform duration-150"
-                    />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors flex items-center justify-center">
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-[10px] font-medium px-2 py-0.5 rounded-full backdrop-blur-xs flex items-center gap-1">
-                        <Maximize2 className="size-3" /> Expand
-                      </span>
-                    </div>
-                  </div>
+                  <MediaBubble
+                    mediaUrl={m.imageUrl}
+                    messageType={m.messageType || 'IMAGE'}
+                    isAgent={isAgent}
+                    onExpandImage={(url) => setLightboxUrl(url)}
+                  />
                 )}
 
                 {/* Text Message Bubble (if text provided) */}
@@ -426,17 +472,27 @@ export function Thread() {
           ))}
         </div>
 
-        {/* Pending Image Attachment Bar */}
-        {pendingImage && (
+        {/* Pending Media Attachment Bar */}
+        {pendingMedia && (
           <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200 animate-in fade-in duration-150">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="relative size-12 rounded-lg overflow-hidden border border-slate-200 bg-white shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={pendingImage.previewUrl}
-                  alt="Upload preview"
-                  className="size-full object-cover"
-                />
+              <div className="relative size-12 rounded-lg overflow-hidden border border-slate-200 bg-white shrink-0 flex items-center justify-center">
+                {pendingMedia.messageType === 'IMAGE' ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={pendingMedia.previewUrl}
+                    alt="Upload preview"
+                    className="size-full object-cover"
+                  />
+                ) : pendingMedia.messageType === 'AUDIO' ? (
+                  <div className="flex items-center justify-center size-full bg-blue-50 text-blue-600">
+                    <Volume2 className="size-6" />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center size-full bg-indigo-50 text-indigo-600">
+                    <Film className="size-6" />
+                  </div>
+                )}
                 {isUploading && (
                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                     <Loader2 className="size-4 text-white animate-spin" />
@@ -445,25 +501,30 @@ export function Thread() {
               </div>
 
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-800 truncate max-w-[200px] sm:max-w-[300px]">
-                  {pendingImage.file.name}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-slate-200/80 text-slate-700">
+                    {pendingMedia.messageType}
+                  </span>
+                  <p className="text-xs font-semibold text-slate-800 truncate max-w-[180px] sm:max-w-[280px]">
+                    {pendingMedia.file.name}
+                  </p>
+                </div>
                 {isUploading ? (
                   <div className="flex items-center gap-2 mt-1">
                     <div className="w-24 bg-slate-200 rounded-full h-1.5 overflow-hidden">
                       <div
                         className="bg-blue-600 h-1.5 rounded-full transition-all duration-200"
-                        style={{ width: `${pendingImage.progress}%` }}
+                        style={{ width: `${pendingMedia.progress}%` }}
                       />
                     </div>
                     <span className="text-[10px] text-blue-600 font-mono font-medium">
-                      {pendingImage.progress}%
+                      {pendingMedia.progress}%
                     </span>
                   </div>
-                ) : pendingImage.error ? (
+                ) : pendingMedia.error ? (
                   <div className="flex items-center gap-1.5 text-[11px] text-rose-600 mt-0.5">
                     <AlertCircle className="size-3 shrink-0" />
-                    <span className="truncate">{pendingImage.error}</span>
+                    <span className="truncate">{pendingMedia.error}</span>
                     <button
                       type="button"
                       onClick={handleRetryUpload}
@@ -482,8 +543,8 @@ export function Thread() {
 
             <button
               type="button"
-              onClick={handleCancelImage}
-              title="Remove image"
+              onClick={handleCancelMedia}
+              title="Remove media"
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
             >
               <X className="size-4" />
@@ -491,13 +552,22 @@ export function Thread() {
           </div>
         )}
 
+        {/* In-Browser Voice Note Recorder */}
+        {isRecordingVoice && (
+          <VoiceRecorder
+            onSendVoiceNote={handleSendVoiceNote}
+            onCancel={() => setIsRecordingVoice(false)}
+            isUploading={isUploading}
+          />
+        )}
+
         {/* Input Bar */}
         <div className="flex items-end gap-2">
-          {/* Hidden file input */}
+          {/* Hidden file input for images, audio, video */}
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
+            accept="image/*,video/*,audio/*"
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -516,12 +586,28 @@ export function Thread() {
             />
           </div>
 
-          {/* Image Upload Button */}
+          {/* Voice Note Recorder Button */}
+          <button
+            type="button"
+            onClick={() => setIsRecordingVoice((prev) => !prev)}
+            disabled={isUploading}
+            title={isRecordingVoice ? 'Close voice recorder' : 'Record voice note'}
+            className={cn(
+              'h-10 w-10 flex items-center justify-center rounded-xl border transition-colors shrink-0 disabled:opacity-40 cursor-pointer',
+              isRecordingVoice
+                ? 'bg-rose-50 border-rose-300 text-rose-600'
+                : 'border-[#E2E8F0] hover:border-rose-300 hover:bg-rose-50/70 text-slate-600 hover:text-rose-600'
+            )}
+          >
+            <Mic className="size-4" />
+          </button>
+
+          {/* Media Upload Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
-            title="Attach image (JPEG, PNG, WEBP, GIF up to 5MB)"
+            title="Attach media (Images, Audio, Video)"
             className="h-10 w-10 flex items-center justify-center rounded-xl border border-[#E2E8F0] hover:border-blue-300 hover:bg-blue-50/70 text-slate-600 hover:text-blue-600 transition-colors shrink-0 disabled:opacity-40 cursor-pointer"
           >
             <ImagePlus className="size-4" />

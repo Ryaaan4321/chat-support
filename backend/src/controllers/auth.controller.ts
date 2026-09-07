@@ -12,7 +12,7 @@ import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { prisma } from '../../lib/prisma';
 import { drainWaitingChatsForAgent } from '../sockets/agent.socket';
 import { updateAgentShiftStatus } from '../services/performance.service';
-
+import { AppError } from '../../lib/errors';
 
 export async function signupHandler(req: Request, res: Response, next: NextFunction) {
   try {
@@ -56,7 +56,7 @@ export async function createCustomerSessionHandler(req: Request, res: Response, 
 export async function getProfileHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     if (!req.user) {
-      return res.status(401).json({ success: false, error: 'Unauthorized' });
+      throw AppError.unauthorized('Authentication required to view profile');
     }
     const profile = await getProfile(req.user.userId, req.user.role);
     res.status(200).json({ success: true, user: profile, data: profile });
@@ -106,7 +106,7 @@ export async function updateAgentCapacityHandler(req: Request, res: Response, ne
     const id = Array.isArray(req.params.id) ? req.params.id[0] : (req.params.id as string);
     const { chatCapacity } = req.body;
     if (!id || !chatCapacity) {
-      return res.status(400).json({ success: false, error: 'Agent id and chatCapacity are required' });
+      throw AppError.badRequest('Agent ID and chat capacity are required');
     }
     const updated = await updateAgentCapacity(id, Number(chatCapacity));
     const io = req.app.get('io');

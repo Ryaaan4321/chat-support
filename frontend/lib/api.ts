@@ -88,18 +88,45 @@ async function request<T>(
   });
 
   if (!response.ok) {
-    let errorData: Partial<ApiErrorResponse> = {};
+    let errorData: any = {};
     try {
       errorData = await response.json();
     } catch {
       errorData = { message: response.statusText };
     }
 
-    throw new ApiError(
-      errorData.message || errorData.error || `Request failed with status ${response.status}`,
-      response.status,
-      errorData.code
-    );
+    let extractedMessage = '';
+    if (typeof errorData?.message === 'string' && errorData.message.trim()) {
+      extractedMessage = errorData.message.trim();
+    } else if (typeof errorData?.error === 'string' && errorData.error.trim()) {
+      extractedMessage = errorData.error.trim();
+    } else if (
+      typeof errorData?.error === 'object' &&
+      errorData.error !== null &&
+      typeof errorData.error.message === 'string' &&
+      errorData.error.message.trim()
+    ) {
+      extractedMessage = errorData.error.message.trim();
+    }
+
+    // Safety fallback: never allow empty message or [object Object] to leak
+    if (!extractedMessage || extractedMessage.includes('[object Object]')) {
+      if (response.status === 409) {
+        extractedMessage = 'An account with this email already exists. Please log in.';
+      } else if (response.status === 404) {
+        extractedMessage = 'Account not found. Please check your email or create an account.';
+      } else if (response.status === 401) {
+        extractedMessage = 'Authentication failed. Please check your credentials.';
+      } else if (response.status >= 500) {
+        extractedMessage = 'Server is currently unable to complete your request. Please try again shortly.';
+      } else {
+        extractedMessage = `Unable to complete request (${response.status}). Please try again.`;
+      }
+    }
+
+    const code = typeof errorData?.code === 'string' ? errorData.code : (errorData?.error?.code || undefined);
+
+    throw new ApiError(extractedMessage, response.status, code);
   }
 
   if (response.status === 204) {

@@ -19,20 +19,27 @@ import {
   Maximize2,
   AlertCircle,
   RefreshCw,
+  Mic,
+  Film,
+  Volume2,
 } from 'lucide-react';
 import { api, getStoredToken } from '@/lib/api';
 import { createSocketClient, TypedSocket } from '@/lib/socket';
 import { ImageLightbox } from '@/components/desk/image-lightbox';
 import {
-  uploadImageToCloudinaryDirect,
-  validateImageFile,
-} from '@/lib/image-upload';
+  uploadMediaToCloudinaryDirect,
+  validateMediaFile,
+} from '@/lib/media-upload';
+import { VoiceRecorder } from '@/components/desk/voice-recorder';
+import { MediaBubble } from '@/components/desk/media-bubble';
+import { UserAvatar } from '@/components/desk/user-avatar';
+import { DEFAULT_CUSTOMER_AVATAR, DEFAULT_AGENT_AVATAR, resolveAvatarUrl } from '@/lib/avatars';
 
 interface ChatMessage {
   id?: string;
   clientTempId?: string;
   senderType: 'CUSTOMER' | 'AGENT';
-  messageType?: 'TEXT' | 'IMAGE';
+  messageType?: 'TEXT' | 'IMAGE' | 'AUDIO' | 'VIDEO';
   text: string;
   imageUrl?: string;
   sentAt: string;
@@ -56,7 +63,7 @@ const CANNED_CUSTOMER_QUERIES = [
 export default function CustomerPage() {
   const [customerId, setCustomerId] = useState('cust-guest');
   const [customerName, setCustomerName] = useState('Customer');
-  const [customerAvatar, setCustomerAvatar] = useState('/avatars/avatar-1.png');
+  const [customerAvatar, setCustomerAvatar] = useState(DEFAULT_CUSTOMER_AVATAR);
 
   const [prompt, setPrompt] = useState('');
   const [selectedTag, setSelectedTag] = useState(ISSUE_TAGS[0]);
@@ -72,10 +79,12 @@ export default function CustomerPage() {
 
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [pendingImage, setPendingImage] = useState<{
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [pendingMedia, setPendingMedia] = useState<{
     file: File;
     previewUrl: string;
     uploadedUrl?: string;
+    messageType: 'IMAGE' | 'AUDIO' | 'VIDEO';
     progress: number;
     error?: string;
   } | null>(null);
@@ -87,43 +96,45 @@ export default function CustomerPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const validation = validateImageFile(file);
-    if (!validation.valid) {
-      alert(validation.error || 'Invalid image file');
+    const validation = validateMediaFile(file);
+    if (!validation.valid || !validation.messageType) {
+      alert(validation.error || 'Invalid media file');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
     const previewUrl = URL.createObjectURL(file);
-    setPendingImage({
+    setPendingMedia({
       file,
       previewUrl,
+      messageType: validation.messageType,
       progress: 5,
     });
     setIsUploading(true);
 
     try {
-      const res = await uploadImageToCloudinaryDirect(file, {
+      const res = await uploadMediaToCloudinaryDirect(file, {
         onProgress: (percent) => {
-          setPendingImage((prev) => (prev ? { ...prev, progress: percent } : null));
+          setPendingMedia((prev) => (prev ? { ...prev, progress: percent } : null));
         },
       });
 
-      setPendingImage((prev) =>
+      setPendingMedia((prev) =>
         prev
           ? {
               ...prev,
               uploadedUrl: res.secureUrl,
+              messageType: res.messageType,
               progress: 100,
             }
           : null
       );
     } catch (err: any) {
-      setPendingImage((prev) =>
+      setPendingMedia((prev) =>
         prev
           ? {
               ...prev,
-              error: err?.message || 'Failed to upload image. Please try again.',
+              error: err?.message || 'Failed to upload media. Please try again.',
             }
           : null
       );
@@ -133,26 +144,59 @@ export default function CustomerPage() {
     }
   };
 
-  const handleRetryUpload = async () => {
-    if (!pendingImage?.file) return;
+  const handleSendVoiceNote = async (audioFile: File) => {
+    if (!chatId || !socket?.connected) return;
+    setIsRecordingVoice(false);
     setIsUploading(true);
-    setPendingImage((prev) => (prev ? { ...prev, error: undefined, progress: 5 } : null));
+    const previewUrl = URL.createObjectURL(audioFile);
+    setPendingMedia({
+      file: audioFile,
+      previewUrl,
+      messageType: 'AUDIO',
+      progress: 15,
+    });
 
     try {
-      const res = await uploadImageToCloudinaryDirect(pendingImage.file, {
+      const res = await uploadMediaToCloudinaryDirect(audioFile, {
         onProgress: (percent) => {
-          setPendingImage((prev) => (prev ? { ...prev, progress: percent } : null));
+          setPendingMedia((prev) => (prev ? { ...prev, progress: percent } : null));
         },
       });
-      setPendingImage((prev) =>
-        prev ? { ...prev, uploadedUrl: res.secureUrl, progress: 100 } : null
-      );
+
+      const sentAt = new Date().toISOString();
+      const clientTempId = 'cust-msg-' + Math.random().toString(36).slice(2, 9);
+
+      socket.emit('chat:message', {
+        id: clientTempId,
+        clientTempId,
+        chatId,
+        senderType: 'CUSTOMER',
+        messageType: 'AUDIO',
+        text: '',
+        imageUrl: res.secureUrl,
+        sentAt,
+      });
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: clientTempId,
+          clientTempId,
+          senderType: 'CUSTOMER',
+          messageType: 'AUDIO',
+          text: '',
+          imageUrl: res.secureUrl,
+          sentAt,
+        },
+      ]);
+
+      setPendingMedia(null);
     } catch (err: any) {
-      setPendingImage((prev) =>
+      setPendingMedia((prev) =>
         prev
           ? {
               ...prev,
-              error: err?.message || 'Failed to upload image. Please try again.',
+              error: err?.message || 'Failed to upload voice note. Please try again.',
             }
           : null
       );
@@ -161,11 +205,39 @@ export default function CustomerPage() {
     }
   };
 
-  const handleCancelImage = () => {
-    if (pendingImage?.previewUrl) {
-      URL.revokeObjectURL(pendingImage.previewUrl);
+  const handleRetryUpload = async () => {
+    if (!pendingMedia?.file) return;
+    setIsUploading(true);
+    setPendingMedia((prev) => (prev ? { ...prev, error: undefined, progress: 5 } : null));
+
+    try {
+      const res = await uploadMediaToCloudinaryDirect(pendingMedia.file, {
+        onProgress: (percent) => {
+          setPendingMedia((prev) => (prev ? { ...prev, progress: percent } : null));
+        },
+      });
+      setPendingMedia((prev) =>
+        prev ? { ...prev, uploadedUrl: res.secureUrl, messageType: res.messageType, progress: 100 } : null
+      );
+    } catch (err: any) {
+      setPendingMedia((prev) =>
+        prev
+          ? {
+              ...prev,
+              error: err?.message || 'Failed to upload media. Please try again.',
+            }
+          : null
+      );
+    } finally {
+      setIsUploading(false);
     }
-    setPendingImage(null);
+  };
+
+  const handleCancelMedia = () => {
+    if (pendingMedia?.previewUrl) {
+      URL.revokeObjectURL(pendingMedia.previewUrl);
+    }
+    setPendingMedia(null);
     setIsUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -363,12 +435,12 @@ export default function CustomerPage() {
 
   const handleSendMessage = () => {
     const trimmed = inputText.trim();
-    const uploadedUrl = pendingImage?.uploadedUrl;
+    const uploadedUrl = pendingMedia?.uploadedUrl;
+    const messageType = pendingMedia?.messageType || (uploadedUrl ? 'IMAGE' : 'TEXT');
     if ((!trimmed && !uploadedUrl) || isUploading || !chatId || !socket?.connected) return;
 
     const sentAt = new Date().toISOString();
     const clientTempId = 'cust-msg-' + Math.random().toString(36).slice(2, 9);
-    const messageType = uploadedUrl ? 'IMAGE' : 'TEXT';
 
     socket.emit('chat:message', {
       id: clientTempId,
@@ -395,10 +467,10 @@ export default function CustomerPage() {
     ]);
 
     setInputText('');
-    if (pendingImage?.previewUrl) {
-      URL.revokeObjectURL(pendingImage.previewUrl);
+    if (pendingMedia?.previewUrl) {
+      URL.revokeObjectURL(pendingMedia.previewUrl);
     }
-    setPendingImage(null);
+    setPendingMedia(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -521,15 +593,13 @@ export default function CustomerPage() {
 
             <header className="flex h-14 items-center justify-between border-b border-[#E2E8F0] px-3.5 sm:px-5 shrink-0 bg-white gap-2">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="size-9 rounded-full relative overflow-hidden bg-[#EFF6FF] border border-[#BFDBFE] shrink-0">
-                  <Image
-                    src={sessionState === 'ACTIVE' ? '/avatars/avatar-2.png' : customerAvatar}
-                    alt="Agent"
-                    fill
-                    sizes="36px"
-                    className="object-cover"
-                  />
-                </div>
+                <UserAvatar
+                  src={sessionState === 'ACTIVE' ? DEFAULT_AGENT_AVATAR : customerAvatar}
+                  alt={sessionState === 'ACTIVE' ? assignedAgentName || 'Agent Support' : customerName}
+                  size="lg"
+                  fallbackText={sessionState === 'ACTIVE' ? 'A' : customerName}
+                  className="bg-[#EFF6FF] border-[#BFDBFE]"
+                />
 
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -610,7 +680,7 @@ export default function CustomerPage() {
 
               {messages.map((m, idx) => {
                 const isCustomer = m.senderType === 'CUSTOMER';
-                const avatar = isCustomer ? customerAvatar : '/avatars/avatar-2.png';
+                const avatar = isCustomer ? customerAvatar : DEFAULT_AGENT_AVATAR;
                 const senderTitle = isCustomer ? 'You' : assignedAgentName || 'Support Agent';
 
                 return (
@@ -620,15 +690,13 @@ export default function CustomerPage() {
                       isCustomer ? 'ml-auto flex-row-reverse' : 'mr-auto flex-row'
                     }`}
                   >
-                    <div className="size-7 rounded-full relative overflow-hidden bg-white border border-[#E2E8F0] shrink-0 mb-1">
-                      <Image
-                        src={avatar}
-                        alt={senderTitle}
-                        fill
-                        sizes="28px"
-                        className="object-cover"
-                      />
-                    </div>
+                    <UserAvatar
+                      src={avatar}
+                      alt={senderTitle}
+                      size="sm"
+                      fallbackText={senderTitle}
+                      className="mb-1 bg-white border-[#E2E8F0]"
+                    />
 
                     <div className={`flex flex-col ${isCustomer ? 'items-end' : 'items-start'}`}>
                       <div className="flex items-center gap-1.5 mb-1 px-1 text-[10px] font-mono text-[#94A3B8]">
@@ -637,24 +705,14 @@ export default function CustomerPage() {
                         <span>{new Date(m.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
 
-                      {/* Image Attachment Preview */}
+                      {/* Attached Media (Image, Audio Voice Note, Video) */}
                       {m.imageUrl && (
-                        <div
-                          onClick={() => setLightboxUrl(m.imageUrl || null)}
-                          className="rounded-2xl overflow-hidden border border-slate-200/80 mb-1 cursor-pointer max-w-[260px] group relative hover:opacity-95 transition-all shadow-xs bg-slate-100"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={m.imageUrl}
-                            alt="Chat attachment"
-                            className="w-full max-h-56 object-cover group-hover:scale-102 transition-transform duration-150"
-                          />
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors flex items-center justify-center">
-                            <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-white text-[10px] font-medium px-2 py-0.5 rounded-full backdrop-blur-xs flex items-center gap-1">
-                              <Maximize2 className="size-3" /> Expand
-                            </span>
-                          </div>
-                        </div>
+                        <MediaBubble
+                          mediaUrl={m.imageUrl}
+                          messageType={m.messageType || 'IMAGE'}
+                          isAgent={!isCustomer}
+                          onExpandImage={(url) => setLightboxUrl(url)}
+                        />
                       )}
 
                       {/* Text Bubble */}
@@ -692,16 +750,26 @@ export default function CustomerPage() {
               </div>
 
               {/* Pending Upload Preview */}
-              {pendingImage && (
+              {pendingMedia && (
                 <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200 animate-in fade-in duration-150">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="relative size-12 rounded-lg overflow-hidden border border-slate-200 bg-white shrink-0">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={pendingImage.previewUrl}
-                        alt="Upload preview"
-                        className="size-full object-cover"
-                      />
+                    <div className="relative size-12 rounded-lg overflow-hidden border border-slate-200 bg-white shrink-0 flex items-center justify-center">
+                      {pendingMedia.messageType === 'IMAGE' ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={pendingMedia.previewUrl}
+                          alt="Upload preview"
+                          className="size-full object-cover"
+                        />
+                      ) : pendingMedia.messageType === 'AUDIO' ? (
+                        <div className="flex items-center justify-center size-full bg-blue-50 text-blue-600">
+                          <Volume2 className="size-6" />
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center size-full bg-indigo-50 text-indigo-600">
+                          <Film className="size-6" />
+                        </div>
+                      )}
                       {isUploading && (
                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                           <Loader2 className="size-4 text-white animate-spin" />
@@ -710,25 +778,30 @@ export default function CustomerPage() {
                     </div>
 
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-slate-800 truncate max-w-[200px] sm:max-w-[300px]">
-                        {pendingImage.file.name}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-slate-200/80 text-slate-700">
+                          {pendingMedia.messageType}
+                        </span>
+                        <p className="text-xs font-semibold text-slate-800 truncate max-w-[180px] sm:max-w-[280px]">
+                          {pendingMedia.file.name}
+                        </p>
+                      </div>
                       {isUploading ? (
                         <div className="flex items-center gap-2 mt-1">
                           <div className="w-24 bg-slate-200 rounded-full h-1.5 overflow-hidden">
                             <div
                               className="bg-blue-600 h-1.5 rounded-full transition-all duration-200"
-                              style={{ width: `${pendingImage.progress}%` }}
+                              style={{ width: `${pendingMedia.progress}%` }}
                             />
                           </div>
                           <span className="text-[10px] text-blue-600 font-mono font-medium">
-                            {pendingImage.progress}%
+                            {pendingMedia.progress}%
                           </span>
                         </div>
-                      ) : pendingImage.error ? (
+                      ) : pendingMedia.error ? (
                         <div className="flex items-center gap-1.5 text-[11px] text-rose-600 mt-0.5">
                           <AlertCircle className="size-3 shrink-0" />
-                          <span className="truncate">{pendingImage.error}</span>
+                          <span className="truncate">{pendingMedia.error}</span>
                           <button
                             type="button"
                             onClick={handleRetryUpload}
@@ -747,8 +820,8 @@ export default function CustomerPage() {
 
                   <button
                     type="button"
-                    onClick={handleCancelImage}
-                    title="Remove image"
+                    onClick={handleCancelMedia}
+                    title="Remove media"
                     className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
                   >
                     <X className="size-4" />
@@ -756,12 +829,21 @@ export default function CustomerPage() {
                 </div>
               )}
 
+              {/* In-Browser Voice Note Recorder */}
+              {isRecordingVoice && (
+                <VoiceRecorder
+                  onSendVoiceNote={handleSendVoiceNote}
+                  onCancel={() => setIsRecordingVoice(false)}
+                  isUploading={isUploading}
+                />
+              )}
+
               <div className="flex items-end gap-2">
-                {/* Hidden file input */}
+                {/* Hidden file input for images, audio, video */}
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  accept="image/*,video/*,audio/*"
                   onChange={handleFileSelect}
                   className="hidden"
                 />
@@ -779,12 +861,27 @@ export default function CustomerPage() {
                   className="min-h-[56px] bg-white border-[#E2E8F0] text-[#0F172A] placeholder-[#94A3B8] rounded-xl text-xs p-2.5 focus:border-[#2563EB] disabled:bg-slate-50"
                 />
 
-                {/* Attach Image Button */}
+                {/* Voice Note Recorder Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsRecordingVoice((prev) => !prev)}
+                  disabled={isUploading || sessionState === 'CLOSED'}
+                  title={isRecordingVoice ? 'Close voice recorder' : 'Record voice note'}
+                  className={`h-10 w-10 flex items-center justify-center rounded-xl border transition-colors shrink-0 disabled:opacity-40 cursor-pointer ${
+                    isRecordingVoice
+                      ? 'bg-rose-50 border-rose-300 text-rose-600'
+                      : 'border-[#E2E8F0] hover:border-rose-300 hover:bg-rose-50/70 text-slate-600 hover:text-rose-600'
+                  }`}
+                >
+                  <Mic className="size-4" />
+                </button>
+
+                {/* Attach Media Button */}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading || sessionState === 'CLOSED'}
-                  title="Attach image (JPEG, PNG, WEBP, GIF up to 5MB)"
+                  title="Attach media (Images, Audio, Video)"
                   className="h-10 w-10 flex items-center justify-center rounded-xl border border-[#E2E8F0] hover:border-blue-300 hover:bg-blue-50/70 text-slate-600 hover:text-blue-600 transition-colors shrink-0 disabled:opacity-40 cursor-pointer"
                 >
                   <ImagePlus className="size-4" />
@@ -793,7 +890,7 @@ export default function CustomerPage() {
                 <Button
                   onClick={handleSendMessage}
                   disabled={
-                    (!inputText.trim() && !pendingImage?.uploadedUrl) ||
+                    (!inputText.trim() && !pendingMedia?.uploadedUrl) ||
                     isUploading ||
                     sessionState === 'CLOSED'
                   }

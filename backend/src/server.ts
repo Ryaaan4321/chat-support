@@ -38,6 +38,11 @@ export function createRealtimeServer() {
   app.use('/api/auth', authRoutes);
   app.use('/api/chats', chatRoutes);
 
+  // Catch-all for undefined routes
+  app.use((req, res, next) => {
+    next(AppError.notFound(`Endpoint ${req.method} ${req.originalUrl} not found`));
+  });
+
   app.use(errorHandler);
 
   const io = new Server<

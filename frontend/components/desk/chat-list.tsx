@@ -6,6 +6,8 @@ import { useDesk, useMyActiveChats, Chat } from '@/lib/desk-store';
 import { cn } from '@/lib/utils';
 import { MessageSquare } from 'lucide-react';
 import { TimeDisplay } from './time-display';
+import { UserAvatar } from './user-avatar';
+import { resolveAvatarUrl } from '@/lib/avatars';
 
 export function ChatList() {
   const chats = useMyActiveChats();
@@ -54,11 +56,12 @@ export function ChatList() {
           (typeof chat.customer === 'object' ? chat.customer?.name : chat.customer) ||
           chat.id;
         const unreadCount = chat.unreadCount ?? chat.unread ?? 0;
-        const avatarUrl =
+        const avatarUrl = resolveAvatarUrl(
           chat.customerAvatar ||
           (chat as any).avatarUrl ||
-          (chat.customer as any)?.avatarUrl ||
-          '/avatars/avatar-1.png';
+          (chat.customer as any)?.avatarUrl,
+          'CUSTOMER'
+        );
 
         return (
           <button
@@ -78,15 +81,13 @@ export function ChatList() {
 
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="size-7 rounded-full relative overflow-hidden bg-[#EFF6FF] border border-[#BFDBFE] shrink-0">
-                  <Image
-                    src={avatarUrl}
-                    alt={customerName}
-                    fill
-                    sizes="28px"
-                    className="object-cover"
-                  />
-                </div>
+                <UserAvatar
+                  src={avatarUrl}
+                  alt={customerName}
+                  size="sm"
+                  fallbackText={customerName}
+                  className="bg-[#EFF6FF] border-[#BFDBFE]"
+                />
                 <span className="text-xs font-semibold text-[#0F172A] truncate">
                   {customerName}
                 </span>

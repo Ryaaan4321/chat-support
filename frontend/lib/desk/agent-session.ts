@@ -2,6 +2,7 @@ import { ShiftStatus } from '../../types/socket.event.types';
 import { createSocketClient } from '../socket';
 import { api, getStoredToken } from '../api';
 import { AgentProfile, Chat, StoreSet, StoreGet } from './types';
+import { resolveAvatarUrl, DEFAULT_CUSTOMER_AVATAR } from '../avatars';
 
 export async function initAgentSession(
   set: StoreSet,
@@ -31,7 +32,7 @@ export async function initAgentSession(
         shiftStatus: (u.shiftStatus as ShiftStatus) || 'AVAILABLE',
         chatCapacity: u.chatCapacity ?? 3,
         activeChatCount: u.activeChatCount ?? 0,
-        avatarUrl: u.avatarUrl || '/avatars/avatar-2.png',
+        avatarUrl: resolveAvatarUrl(u.avatarUrl, 'AGENT'),
       };
       set({ me: currentAgent });
     }
@@ -49,7 +50,7 @@ export async function initAgentSession(
       id: c.id,
       customerId: c.customerId,
       customer: c.customerId,
-      customerAvatar: '/avatars/avatar-1.png',
+      customerAvatar: DEFAULT_CUSTOMER_AVATAR,
       status: c.status,
       assignedAgentId: c.assignedAgentId || currentAgent.id,
       queuedAt: c.queuedAt,
@@ -112,7 +113,7 @@ export async function initAgentSession(
               id: chatId,
               customerId,
               customer: customerId,
-              customerAvatar: '/avatars/avatar-1.png',
+              customerAvatar: DEFAULT_CUSTOMER_AVATAR,
               status: 'ACTIVE',
               assignedAgentId,
               assignedAt: payload.assignedAt,

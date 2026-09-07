@@ -4,6 +4,7 @@ import { AgentProfile, Chat, DeskState } from './desk/types';
 import { initAgentSession } from './desk/agent-session';
 import { initManagerSession } from './desk/manager-session';
 import { createChatActions } from './desk/chat-actions';
+import { DEFAULT_AGENT_AVATAR } from './avatars';
 
 // Re-export all desk types for 100% backward compatibility
 export * from './desk/types';
@@ -18,7 +19,7 @@ export const useDesk = create<DeskState>((set, get) => ({
     shiftStatus: 'AVAILABLE',
     chatCapacity: 3,
     activeChatCount: 0,
-    avatarUrl: '/avatars/avatar-2.png',
+    avatarUrl: DEFAULT_AGENT_AVATAR,
   },
   agents: [],
   chats: [],

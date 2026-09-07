@@ -1,0 +1,44 @@
+[
+  {
+    "id": "avatar-afro",
+    "label": "Afro",
+    "secureUrl": "https://res.cloudinary.com/dfaocyti0/image/upload/v1788741446/swish_avatars/avatar-afro.png",
+    "publicId": "swish_avatars/avatar-afro"
+  },
+  {
+    "id": "avatar-curly",
+    "label": "Curly",
+    "secureUrl": "https://res.cloudinary.com/dfaocyti0/image/upload/v1788741446/swish_avatars/avatar-curly.png",
+    "publicId": "swish_avatars/avatar-curly"
+  },
+  {
+    "id": "avatar-bob",
+    "label": "Bob",
+    "secureUrl": "https://res.cloudinary.com/dfaocyti0/image/upload/v1788741447/swish_avatars/avatar-bob.png",
+    "publicId": "swish_avatars/avatar-bob"
+  },
+  {
+    "id": "avatar-bun",
+    "label": "Top Bun",
+    "secureUrl": "https://res.cloudinary.com/dfaocyti0/image/upload/v1788741448/swish_avatars/avatar-bun.png",
+    "publicId": "swish_avatars/avatar-bun"
+  },
+  {
+    "id": "avatar-eyepatch",
+    "label": "Captain",
+    "secureUrl": "https://res.cloudinary.com/dfaocyti0/image/upload/v1788741448/swish_avatars/avatar-eyepatch.png",
+    "publicId": "swish_avatars/avatar-eyepatch"
+  },
+  {
+    "id": "avatar-hijab",
+    "label": "Hijab",
+    "secureUrl": "https://res.cloudinary.com/dfaocyti0/image/upload/v1788741449/swish_avatars/avatar-hijab.png",
+    "publicId": "swish_avatars/avatar-hijab"
+  },
+  {
+    "id": "avatar-mustache",
+    "label": "Mustache",
+    "secureUrl": "https://res.cloudinary.com/dfaocyti0/image/upload/v1788741450/swish_avatars/avatar-mustache.png",
+    "publicId": "swish_avatars/avatar-mustache"
+  }
+]
