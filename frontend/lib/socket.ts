@@ -3,7 +3,7 @@ import type { ClientToServerEvents, ServerToClientEvents, SocketData } from '../
 
 export type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4001';
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4001';
 
 let activeSocket: TypedSocket | null = null;
 let activeAuthKey: string | null = null;
