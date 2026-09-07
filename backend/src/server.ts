@@ -18,27 +18,17 @@ export function createRealtimeServer() {
 
   app.use(express.json());
 
-  const rawOrigins = process.env.CLIENT_ORIGIN || 'http://localhost:3000';
-  const allowedOrigins = rawOrigins.split(',').map((o) => o.trim());
-
-  function isOriginAllowed(origin?: string): boolean {
-    if (!origin) return true;
-    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) return true;
-    if (origin.endsWith('.vercel.app')) return true;
-    if (origin.startsWith('http://localhost:')) return true;
-    return false;
-  }
-
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (isOriginAllowed(origin)) {
-      res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
     } else {
-      res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0] || '*');
+      res.setHeader('Access-Control-Allow-Origin', '*');
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('X-Backend-Version', '2.1.0');
     if (req.method === 'OPTIONS') {
       res.sendStatus(204);
       return;
@@ -47,7 +37,7 @@ export function createRealtimeServer() {
   });
 
   app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.status(200).json({ status: 'ok', version: '2.1.0', timestamp: new Date().toISOString() });
   });
 
   app.use('/api/auth', authRoutes);
@@ -68,11 +58,7 @@ export function createRealtimeServer() {
   >(httpServer, {
     cors: {
       origin: (origin, callback) => {
-        if (isOriginAllowed(origin)) {
-          callback(null, true);
-        } else {
-          callback(null, true);
-        }
+        callback(null, true);
       },
       credentials: true,
     },
