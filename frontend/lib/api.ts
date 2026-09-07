@@ -76,7 +76,9 @@ async function request<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const cleanBase = (API_BASE_URL || '').replace(/\/+$/, '');
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${cleanBase}${cleanEndpoint}`;
   const token = getStoredToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

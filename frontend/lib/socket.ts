@@ -22,7 +22,8 @@ export function createSocketClient(auth: SocketData & { token?: string }): Typed
     activeSocket.disconnect();
   }
 
-  activeSocket = io(SOCKET_URL, {
+  const cleanSocketUrl = (SOCKET_URL || '').replace(/\/+$/, '');
+  activeSocket = io(cleanSocketUrl, {
     auth: {
       token: auth.token || '',
       role: auth.role,

@@ -21,10 +21,18 @@ export function createRealtimeServer() {
   const rawOrigins = process.env.CLIENT_ORIGIN || 'http://localhost:3000';
   const allowedOrigins = rawOrigins.split(',').map((o) => o.trim());
 
+  function isOriginAllowed(origin?: string): boolean {
+    if (!origin) return true;
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) return true;
+    if (origin.endsWith('.vercel.app')) return true;
+    if (origin.startsWith('http://localhost:')) return true;
+    return false;
+  }
+
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && (allowedOrigins.includes(origin) || allowedOrigins.includes('*'))) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
+    if (isOriginAllowed(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin || '*');
     } else {
       res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0] || '*');
     }
@@ -60,7 +68,7 @@ export function createRealtimeServer() {
   >(httpServer, {
     cors: {
       origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        if (isOriginAllowed(origin)) {
           callback(null, true);
         } else {
           callback(null, true);
