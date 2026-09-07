@@ -15,12 +15,7 @@ import {
   SingleChatResponse,
 } from '../types/api.types';
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  'http://localhost:4001';
-
+const API_BASE_URL = 'https://chat-support-dips.onrender.com'
 const TOKEN_KEY = 'swish_auth_token';
 const ROLE_KEY = 'swish_user_role';
 
