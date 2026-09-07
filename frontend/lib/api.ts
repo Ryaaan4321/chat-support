@@ -16,7 +16,7 @@ import {
 } from '../types/api.types';
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4001';
+  process.env.NEXT_PUBLIC_URL || 'http://localhost:4001';
 
 const TOKEN_KEY = 'swish_auth_token';
 const ROLE_KEY = 'swish_user_role';
@@ -199,7 +199,7 @@ export const api = {
     logout: async (): Promise<void> => {
       try {
         await request<{ success: boolean }>('/api/auth/logout', { method: 'POST' });
-      } catch {}
+      } catch { }
       clearStoredAuth();
     },
   },
